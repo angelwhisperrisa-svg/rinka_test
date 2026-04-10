@@ -71,9 +71,13 @@ const styles = `
   }
 
   .page {
-    min-height: 100vh;
+    min-height: 100dvh;
     position: relative;
-    padding: 26px 14px 40px;
+    padding: clamp(20px, 5vh, 40px) 14px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    background: radial-gradient(circle at 20% 20%, #f9f2ff 0%, #eef7ff 45%, #eef5f0 100%);
   }
 
   .float-layer-back,
@@ -124,7 +128,7 @@ const styles = `
 
   .container {
     width: 100%;
-    max-width: 500px;
+    max-width: min(92vw, 860px);
     margin: 0 auto;
     border-radius: 24px;
     padding: 40px 24px 56px;
@@ -133,6 +137,30 @@ const styles = `
     box-shadow: 0 16px 42px rgba(158, 142, 189, 0.16), inset 0 1px 0 rgba(255,255,255,0.7);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
+  }
+
+  @media (min-width: 820px) {
+    .container {
+      max-width: min(90vw, 840px);
+    }
+  }
+
+  @media (min-width: 900px) {
+    .container {
+      max-width: min(88vw, 900px);
+    }
+  }
+
+  @media (min-height: 860px) {
+    .page {
+      padding-top: 5.5vh;
+      padding-bottom: 5.5vh;
+    }
+    .container {
+      padding-top: 46px;
+      padding-bottom: 62px;
+    }
+    .header { margin-bottom: 36px; }
   }
 
   .header { text-align: center; margin-bottom: 32px; }
