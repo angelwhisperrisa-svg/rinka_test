@@ -131,7 +131,7 @@ const styles = `
     max-width: min(96vw, 900px);
     margin: 0 auto;
     border-radius: 24px;
-    padding: 34px 20px 46px;
+    padding: 28px 10px 30px;
     background: linear-gradient(145deg, rgba(255,255,255,0.54), rgba(255,255,255,0.34));
     border: 1px solid rgba(255,255,255,0.55);
     box-shadow: 0 16px 42px rgba(158, 142, 189, 0.16), inset 0 1px 0 rgba(255,255,255,0.7);
@@ -167,35 +167,36 @@ const styles = `
   @media (max-height: 820px) {
     .page {
       justify-content: flex-start;
-      padding-top: 12px;
-      padding-bottom: 16px;
+      padding-top: 8px;
+      padding-bottom: 10px;
     }
     .container {
-      padding-top: 20px;
-      padding-bottom: 24px;
+      padding-top: 12px;
+      padding-bottom: 12px;
     }
-    .header { margin-bottom: 14px; }
-    .card { padding-top: 16px; padding-bottom: 16px; }
+    .header { margin-bottom: 10px; }
+    .card { padding-top: 10px; padding-bottom: 10px; }
     .orb {
-      width: 214px;
-      height: 214px;
-      margin-bottom: 12px;
+      width: 196px;
+      height: 196px;
+      margin-bottom: 8px;
     }
     .start-text {
-      margin-bottom: 10px;
-      line-height: 1.62;
-      font-size: clamp(14px, 3.7vw, 16px);
+      margin-bottom: 6px;
+      line-height: 1.4;
+      font-size: clamp(13px, 3.4vw, 14px);
+      max-width: 21ch;
     }
     .start-btn {
-      min-height: 50px;
-      min-width: 204px;
-      padding: 12px 36px;
-      font-size: clamp(18px, 5vw, 22px);
+      min-height: 47px;
+      min-width: 194px;
+      padding: 10px 28px;
+      font-size: clamp(16px, 4.6vw, 19px);
     }
-    .floating-note { margin-top: 6px; }
+    .floating-note { margin-top: 1px; }
   }
 
-  .header { text-align: center; margin-bottom: 26px; }
+  .header { text-align: center; margin-bottom: 20px; }
   .sub {
     color: #6b5b95;
     font-size: clamp(11px, 3vw, 12px);
@@ -218,12 +219,15 @@ const styles = `
     margin: 0;
     color: #6b6680;
     font-size: clamp(14px, 4vw, 16px);
-    line-height: 1.72;
+    line-height: 1.58;
+    max-width: 24ch;
+    margin-inline: auto;
+    text-wrap: pretty;
   }
 
   .card {
     border-radius: 20px;
-    padding: 22px 18px;
+    padding: 16px 8px;
     background: linear-gradient(150deg, rgba(255,255,255,0.8), rgba(255,255,255,0.66));
     border: 1px solid rgba(255,255,255,0.7);
     box-shadow: 0 12px 26px rgba(169, 150, 194, 0.11);
@@ -234,7 +238,7 @@ const styles = `
   .orb {
     width: 246px;
     height: 246px;
-    margin: 0 auto 20px;
+    margin: 0 auto 10px;
     border-radius: 50%;
     display: grid;
     place-items: center;
@@ -327,10 +331,12 @@ const styles = `
   }
 
   .start-text {
-    margin: 0 0 16px;
+    margin: 0 auto 8px;
     color: #555;
-    font-size: clamp(15px, 4.2vw, 17px);
-    line-height: 1.8;
+    font-size: clamp(14px, 3.7vw, 15px);
+    line-height: 1.46;
+    max-width: 22ch;
+    text-wrap: pretty;
   }
   .start-btn {
     border: none;
@@ -346,7 +352,7 @@ const styles = `
     min-height: 56px;
     min-width: 220px;
   }
-  .floating-note { margin-top: 8px; color: #999; font-size: 12px; }
+  .floating-note { margin-top: 2px; color: #999; font-size: 12px; }
 
   .progress-wrap { margin-bottom: 14px; }
   .progress-label {
@@ -643,7 +649,6 @@ export default function App() {
             <div className="sub">✦ Color Diagnosis ✦</div>
             <h1 className="title">推し活💜推し色占い</h1>
             <p className="desc">
-              あなたの内側に宿る色が、<br />
               あなたにふさわしい推し色を教えてくれる。
             </p>
           </header>
@@ -656,10 +661,7 @@ export default function App() {
                 <span className="orb-heart">💜</span>
               </div>
               <p className="start-text">
-                7つの質問に答えるだけで、<br />
-                あなただけの「推し色」が見つかります。<br />
-                色には感情がある。<br />
-                あなたはどの色に選ばれるのでしょう。
+                7つの質問で、あなただけの「推し色」が見つかる。色には感情がある。あなたはどの色に選ばれるのでしょう。
               </p>
               <button className="start-btn" onClick={startQuiz}>診断スタート</button>
               <div className="floating-note">全7問・約1分</div>
