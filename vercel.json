@@ -1,0 +1,11 @@
+{
+  "installCommand": "cd shima-brand && npm install",
+  "buildCommand": "cd shima-brand && npm run build",
+  "outputDirectory": "shima-brand/build",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
