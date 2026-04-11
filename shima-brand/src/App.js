@@ -766,26 +766,12 @@ export default function App() {
   }, [screen, welcomeMuted]);
 
   useEffect(() => {
-    if (screen !== "welcome") {
-      if (welcomeSilentSkipTimerRef.current) {
-        window.clearTimeout(welcomeSilentSkipTimerRef.current);
-        welcomeSilentSkipTimerRef.current = null;
-      }
-      return undefined;
-    }
-    welcomeSilentSkipTimerRef.current = window.setTimeout(() => {
+    if (screen === "welcome") return undefined;
+    if (welcomeSilentSkipTimerRef.current) {
+      window.clearTimeout(welcomeSilentSkipTimerRef.current);
       welcomeSilentSkipTimerRef.current = null;
-      if (welcomeEngagedRef.current) return;
-      setScreen("start");
-      setWelcomeMuted(true);
-      setWelcomeExiting(false);
-    }, 5000);
-    return () => {
-      if (welcomeSilentSkipTimerRef.current) {
-        window.clearTimeout(welcomeSilentSkipTimerRef.current);
-        welcomeSilentSkipTimerRef.current = null;
-      }
-    };
+    }
+    return undefined;
   }, [screen]);
 
   useEffect(() => () => {
@@ -821,17 +807,28 @@ export default function App() {
 
   const handleWelcomeEnded = () => {
     const v = welcomeVideoRef.current;
-    if (!welcomeEngagedRef.current) return;
-    if (!v || v.muted) return;
-    if (welcomeExitTimerRef.current) window.clearTimeout(welcomeExitTimerRef.current);
-    setWelcomeExiting(true);
-    welcomeExitTimerRef.current = window.setTimeout(() => {
-      welcomeExitTimerRef.current = null;
-      welcomeEngagedRef.current = false;
+    if (welcomeEngagedRef.current) {
+      if (!v || v.muted) return;
+      if (welcomeExitTimerRef.current) window.clearTimeout(welcomeExitTimerRef.current);
+      setWelcomeExiting(true);
+      welcomeExitTimerRef.current = window.setTimeout(() => {
+        welcomeExitTimerRef.current = null;
+        welcomeEngagedRef.current = false;
+        setScreen("start");
+        setWelcomeExiting(false);
+        setWelcomeMuted(true);
+      }, 480);
+      return;
+    }
+    if (welcomeSilentSkipTimerRef.current) {
+      window.clearTimeout(welcomeSilentSkipTimerRef.current);
+    }
+    welcomeSilentSkipTimerRef.current = window.setTimeout(() => {
+      welcomeSilentSkipTimerRef.current = null;
       setScreen("start");
-      setWelcomeExiting(false);
       setWelcomeMuted(true);
-    }, 480);
+      setWelcomeExiting(false);
+    }, 5000);
   };
 
   const startQuiz = () => {
