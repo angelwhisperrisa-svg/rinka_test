@@ -558,8 +558,8 @@ const styles = `
     overflow: hidden;
   }
 
-  .video-stage--cta {
-    background: radial-gradient(ellipse at 50% 35%, #2d1b45 0%, #0f0818 100%);
+  .video-stage--welcome {
+    background: #0c0614;
   }
 
   .video-layer {
@@ -582,59 +582,81 @@ const styles = `
     display: block;
   }
 
-  .video-ui {
-    position: relative;
-    z-index: 2;
+  .video-stage--welcome .video-layer video {
+    object-position: center center;
+  }
+
+  @media (min-width: 768px) {
+    .video-stage--welcome .video-layer video {
+      object-position: center top;
+    }
+  }
+
+  .video-stage--welcome-exit .video-layer,
+  .video-stage--welcome-exit .welcome-overlay {
+    opacity: 0;
+    transition: opacity 0.48s ease-out;
+    pointer-events: none;
+  }
+
+  .welcome-overlay {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: clamp(56px, 16vh, 140px);
+    z-index: 3;
     display: flex;
-    flex-direction: column;
-    align-items: center;
     justify-content: center;
-    gap: 18px;
-    padding: 28px 22px;
-    text-align: center;
-    max-width: min(92vw, 380px);
+    padding: 0 20px;
+    pointer-events: none;
   }
 
-  .video-hint {
-    margin: 0;
-    color: rgba(255, 255, 255, 0.94);
-    font-size: clamp(15px, 4vw, 17px);
-    line-height: 1.75;
-    text-shadow: 0 2px 18px rgba(0, 0, 0, 0.55);
-  }
-
-  .video-play-btn {
-    border: none;
+  .welcome-glass-btn {
+    pointer-events: auto;
     cursor: pointer;
-    border-radius: 999px;
-    padding: 14px 30px;
-    font-size: clamp(15px, 4vw, 17px);
+    font-family: inherit;
+    font-size: clamp(14px, 3.7vw, 16px);
     font-weight: 700;
-    font-family: inherit;
-    background: linear-gradient(135deg, #f0d4ff, #d4c4ff);
-    color: #3d2a5c;
-    box-shadow: 0 14px 36px rgba(0, 0, 0, 0.42);
+    letter-spacing: 0.02em;
+    line-height: 1.35;
+    color: rgba(255, 255, 255, 0.96);
+    text-shadow: 0 1px 10px rgba(0, 0, 0, 0.45);
+    padding: 15px 26px;
     min-height: 52px;
-  }
-
-  .welcome-start-btn {
-    border: none;
-    cursor: pointer;
+    max-width: min(92vw, 340px);
+    width: 100%;
     border-radius: 999px;
-    padding: 16px 36px;
-    font-size: clamp(16px, 4.2vw, 18px);
-    font-weight: 800;
-    font-family: inherit;
-    background: rgba(255, 255, 255, 0.96);
-    color: #5b3d8a;
-    box-shadow: 0 16px 44px rgba(0, 0, 0, 0.45);
-    min-height: 56px;
-    min-width: 240px;
-    animation: welcomeCtaIn 0.65s ease-out both;
+    border: 1px solid rgba(255, 255, 255, 0.52);
+    box-shadow:
+      0 0 0 1px rgba(218, 190, 120, 0.35),
+      0 8px 32px rgba(80, 40, 120, 0.35),
+      inset 0 1px 0 rgba(255, 255, 255, 0.42);
+    background: linear-gradient(
+      145deg,
+      rgba(255, 255, 255, 0.26) 0%,
+      rgba(244, 232, 255, 0.14) 45%,
+      rgba(230, 220, 255, 0.1) 100%
+    );
+    backdrop-filter: blur(16px) saturate(1.2);
+    -webkit-backdrop-filter: blur(16px) saturate(1.2);
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    animation: welcomeGlassIn 0.75s ease-out 0.15s both;
   }
 
-  @keyframes welcomeCtaIn {
-    from { opacity: 0; transform: translateY(14px); }
+  .welcome-glass-btn:hover {
+    border-color: rgba(255, 248, 220, 0.65);
+    box-shadow:
+      0 0 0 1px rgba(235, 200, 120, 0.5),
+      0 12px 40px rgba(120, 70, 180, 0.38),
+      inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  }
+
+  .welcome-glass-btn:active {
+    transform: scale(0.98);
+  }
+
+  @keyframes welcomeGlassIn {
+    from { opacity: 0; transform: translateY(12px); }
     to { opacity: 1; transform: translateY(0); }
   }
 
@@ -697,7 +719,8 @@ const styles = `
 
 export default function App() {
   const [screen, setScreen] = useState("welcome");
-  const [welcomePhase, setWelcomePhase] = useState("prompt");
+  const [welcomeMuted, setWelcomeMuted] = useState(true);
+  const [welcomeExiting, setWelcomeExiting] = useState(false);
   const [currentQ, setCurrentQ] = useState(0);
   const [scores, setScores] = useState(initialScores);
   const [resultKey, setResultKey] = useState("");
@@ -706,6 +729,7 @@ export default function App() {
   const welcomeVideoRef = useRef(null);
   const midVideoRef = useRef(null);
   const finalVideoRef = useRef(null);
+  const welcomeExitTimerRef = useRef(null);
 
   const progress = Math.round((currentQ / questions.length) * 100);
   const currentQuestion = questions[currentQ];
@@ -715,16 +739,18 @@ export default function App() {
     screen === "welcome" || screen === "calculating" || midVideoActive;
 
   useEffect(() => {
-    if (welcomePhase !== "playing" && welcomePhase !== "fading") return;
+    if (screen !== "welcome") return undefined;
     const v = welcomeVideoRef.current;
-    if (!v) return;
-    if (welcomePhase === "playing") {
-      v.muted = false;
-      v.currentTime = 0;
-      const p = v.play();
-      if (p && typeof p.catch === "function") p.catch(() => {});
-    }
-  }, [welcomePhase]);
+    if (!v) return undefined;
+    v.muted = welcomeMuted;
+    const p = v.play();
+    if (p && typeof p.catch === "function") p.catch(() => {});
+    return undefined;
+  }, [screen, welcomeMuted]);
+
+  useEffect(() => () => {
+    if (welcomeExitTimerRef.current) window.clearTimeout(welcomeExitTimerRef.current);
+  }, []);
 
   useEffect(() => {
     if (!midVideoActive) return;
@@ -746,9 +772,25 @@ export default function App() {
     if (p && typeof p.catch === "function") p.catch(() => {});
   }, [screen]);
 
+  const handleWelcomeSoundOn = () => {
+    const v = welcomeVideoRef.current;
+    setWelcomeMuted(false);
+    if (v) {
+      v.muted = false;
+      const p = v.play();
+      if (p && typeof p.catch === "function") p.catch(() => {});
+    }
+  };
+
   const handleWelcomeEnded = () => {
-    setWelcomePhase("fading");
-    window.setTimeout(() => setWelcomePhase("cta"), 560);
+    if (welcomeExitTimerRef.current) window.clearTimeout(welcomeExitTimerRef.current);
+    setWelcomeExiting(true);
+    welcomeExitTimerRef.current = window.setTimeout(() => {
+      welcomeExitTimerRef.current = null;
+      setScreen("start");
+      setWelcomeExiting(false);
+      setWelcomeMuted(true);
+    }, 480);
   };
 
   const startQuiz = () => {
@@ -780,7 +822,8 @@ export default function App() {
 
   const resetDiagnosis = () => {
     setScreen("start");
-    setWelcomePhase("prompt");
+    setWelcomeMuted(true);
+    setWelcomeExiting(false);
     setCurrentQ(0);
     setScores(initialScores);
     setResultKey("");
@@ -981,33 +1024,25 @@ export default function App() {
         )}
 
         {screen === "welcome" && (
-          <div className={`video-stage${welcomePhase === "cta" ? " video-stage--cta" : ""}`}>
-            {(welcomePhase === "playing" || welcomePhase === "fading") && (
-              <div className={`video-layer${welcomePhase === "fading" ? " video-layer--fade" : ""}`}>
-                <video
-                  ref={welcomeVideoRef}
-                  src={VIDEO.welcome}
-                  playsInline
-                  preload="auto"
-                  onEnded={handleWelcomeEnded}
-                />
-              </div>
-            )}
-            {welcomePhase === "prompt" && (
-              <div className="video-ui">
-                <p className="video-hint">音声をオンにしてお楽しみください</p>
-                <button type="button" className="video-play-btn" onClick={() => setWelcomePhase("playing")}>
-                  動画を再生する
-                </button>
-              </div>
-            )}
-            {welcomePhase === "cta" && (
-              <div className="video-ui">
-                <button type="button" className="welcome-start-btn" onClick={() => setScreen("start")}>
-                  診断を始める
-                </button>
-              </div>
-            )}
+          <div
+            className={`video-stage video-stage--welcome${welcomeExiting ? " video-stage--welcome-exit" : ""}`}
+          >
+            <div className="video-layer video-layer--welcome">
+              <video
+                ref={welcomeVideoRef}
+                src={VIDEO.welcome}
+                playsInline
+                autoPlay
+                muted={welcomeMuted}
+                preload="auto"
+                onEnded={handleWelcomeEnded}
+              />
+            </div>
+            <div className="welcome-overlay">
+              <button type="button" className="welcome-glass-btn" onClick={handleWelcomeSoundOn}>
+                音声をオンにして診断を始める 🔘
+              </button>
+            </div>
           </div>
         )}
 
