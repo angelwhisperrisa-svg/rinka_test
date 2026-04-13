@@ -106,7 +106,7 @@ export default async function handler(req, res) {
   }
 
   const siteBase = (process.env.PUBLIC_SITE_URL || "https://shima-brand.vercel.app").replace(/\/$/, "");
-  const fullUrl = `${siteBase}/result?type=${encodeURIComponent(resultType)}&mode=full`;
+  const fullUrl = `${siteBase}/result?auto=true&mode=full`;
   const label = TYPE_LABEL[resultType] || resultType;
 
   const serverBody = PUSH_BODY[resultType] || "";

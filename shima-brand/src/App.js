@@ -12,6 +12,39 @@ const RESULT_TYPE_KEYS = ["mint", "rose", "lavender", "ivory", "skyblue"];
 const REACT_APP_LIFF_ID = process.env.REACT_APP_LIFF_ID || "";
 const LINE_BRAND = "薫凛香房 公式LINE";
 
+/** 診断タイプ保持（リッチメニュー等の /result?auto=true から分岐するため） */
+const OSHI_RESULT_STORAGE_KEY = "shima_oshi_result_v1";
+
+function readStoredOshiType() {
+  try {
+    if (typeof window === "undefined") return null;
+    const raw = window.localStorage.getItem(OSHI_RESULT_STORAGE_KEY);
+    if (raw && RESULT_TYPE_KEYS.includes(raw)) return raw;
+  } catch (_) {
+    /* private mode 等 */
+  }
+  return null;
+}
+
+function writeStoredOshiType(typeKey) {
+  try {
+    if (typeof window === "undefined") return;
+    if (!typeKey || !RESULT_TYPE_KEYS.includes(typeKey)) return;
+    window.localStorage.setItem(OSHI_RESULT_STORAGE_KEY, typeKey);
+  } catch (_) {
+    /* ignore */
+  }
+}
+
+function clearStoredOshiType() {
+  try {
+    if (typeof window === "undefined") return;
+    window.localStorage.removeItem(OSHI_RESULT_STORAGE_KEY);
+  } catch (_) {
+    /* ignore */
+  }
+}
+
 function getLineQrSrc() {
   const custom = process.env.REACT_APP_LINE_QR_IMAGE_URL;
   if (custom) return custom;
@@ -27,17 +60,26 @@ function computeResultFromScores(sc) {
   return tieOrder.find((k) => tops.includes(k)) || tops[0];
 }
 
-/** 各色のBASE（フル鑑定）リンク。未設定時は共通 REACT_APP_BASE_FULL_URL */
+/**
+ * 各色の BASE（有料・フル鑑定）URL。ボタンは常にこの関数だけを参照する（色ごとの if 分岐をここに集約）。
+ */
 function getBaseShopUrlForType(typeKey) {
-  if (!typeKey || !RESULT_TYPE_KEYS.includes(typeKey)) return BASE_FULL_URL;
-  const map = {
-    mint: process.env.REACT_APP_BASE_MINT,
-    rose: process.env.REACT_APP_BASE_ROSE,
-    lavender: process.env.REACT_APP_BASE_LAVENDER,
-    ivory: process.env.REACT_APP_BASE_IVORY,
-    skyblue: process.env.REACT_APP_BASE_SKYBLUE
-  };
-  return map[typeKey] || process.env.REACT_APP_BASE_FULL_URL || BASE_FULL_URL;
+  const fallback = process.env.REACT_APP_BASE_FULL_URL || BASE_FULL_URL;
+  if (!typeKey || !RESULT_TYPE_KEYS.includes(typeKey)) return fallback;
+  if (typeKey === "mint") return process.env.REACT_APP_BASE_MINT || fallback;
+  if (typeKey === "rose") return process.env.REACT_APP_BASE_ROSE || fallback;
+  if (typeKey === "lavender") return process.env.REACT_APP_BASE_LAVENDER || fallback;
+  if (typeKey === "ivory") return process.env.REACT_APP_BASE_IVORY || fallback;
+  if (typeKey === "skyblue") return process.env.REACT_APP_BASE_SKYBLUE || fallback;
+  return fallback;
+}
+
+/** リッチメニュー・広告用の「一本URL」。同一ブラウザで診断済みなら保存 type へ分岐（未保存時はトップへ誘導）。 */
+function buildMagicAutoResultUrl(modeFull) {
+  if (typeof window === "undefined") return "";
+  const prefix = (publicUrl || "").replace(/\/$/, "");
+  const mode = modeFull ? "full" : "free";
+  return `${window.location.origin}${prefix}/result?auto=true&mode=${mode}`;
 }
 
 /**
@@ -56,20 +98,35 @@ function isLikelyLineInAppBrowser() {
 }
 
 function parseInitialResultRoute() {
-  if (typeof window === "undefined") {
-    return { showResult: false, resultType: null, modeFull: false };
-  }
+  const empty = { showResult: false, resultType: null, modeFull: false };
+  if (typeof window === "undefined") return empty;
+
   const path = (window.location.pathname || "/").replace(/\/$/, "") || "/";
   const isResultPath = path === "/result" || path.endsWith("/result");
-  if (!isResultPath) {
-    return { showResult: false, resultType: null, modeFull: false };
-  }
+  if (!isResultPath) return empty;
+
   const params = new URLSearchParams(window.location.search);
+  const autoRaw = params.get("auto");
+  const isAuto = autoRaw === "true" || autoRaw === "1";
+
+  if (isAuto) {
+    const stored = readStoredOshiType();
+    const modeParam = (params.get("mode") || "full").toLowerCase();
+    const modeFull = modeParam !== "free";
+    if (stored) {
+      return {
+        showResult: true,
+        resultType: stored,
+        modeFull,
+        replaceUrlWithCanonical: true
+      };
+    }
+    return { ...empty, autoMissingStorage: true };
+  }
+
   const type = params.get("type");
   const mode = params.get("mode");
-  if (!type || !RESULT_TYPE_KEYS.includes(type)) {
-    return { showResult: false, resultType: null, modeFull: false };
-  }
+  if (!type || !RESULT_TYPE_KEYS.includes(type)) return empty;
   return {
     showResult: true,
     resultType: type,
@@ -1087,11 +1144,27 @@ export default function App() {
   useLayoutEffect(() => {
     if (deepLinkConsumedRef.current) return;
     const p = pendingDeepLinkRef.current;
+    if (p.autoMissingStorage) {
+      deepLinkConsumedRef.current = true;
+      if (typeof window !== "undefined") {
+        const base = (publicUrl || "").replace(/\/$/, "");
+        window.history.replaceState({}, "", base ? `${base}/` : "/");
+      }
+      setScreen("welcome");
+      return;
+    }
     if (p.showResult && p.resultType) {
       deepLinkConsumedRef.current = true;
       setResultKey(p.resultType);
       setResultModeFull(Boolean(p.modeFull));
       setScreen("result");
+      if (p.replaceUrlWithCanonical && typeof window !== "undefined") {
+        const base = (publicUrl || "").replace(/\/$/, "");
+        const modeStr = p.modeFull ? "full" : "free";
+        const qs = `?type=${encodeURIComponent(p.resultType)}&mode=${modeStr}`;
+        const path = base ? `${base}/result${qs}` : `/result${qs}`;
+        window.history.replaceState({}, "", path);
+      }
     }
   }, []);
 
@@ -1105,6 +1178,10 @@ export default function App() {
     const path = base ? `${base}/result${qs}` : `/result${qs}`;
     window.history.replaceState({}, "", path);
   }, [screen, resultKey]);
+
+  useEffect(() => {
+    if (resultKey) writeStoredOshiType(resultKey);
+  }, [resultKey]);
 
   useEffect(() => {
     if (screen !== "welcome") return undefined;
@@ -1208,6 +1285,7 @@ export default function App() {
   const resetDiagnosis = () => {
     linePushSentRef.current = false;
     shouldSyncQuizResultUrlRef.current = false;
+    clearStoredOshiType();
     if (typeof window !== "undefined") {
       const path = (window.location.pathname || "").replace(/\/$/, "") || "/";
       if (path === "/result" || path.endsWith("/result")) {
@@ -1279,10 +1357,7 @@ export default function App() {
 
   const renderOshiResultCard = (res, isFull, typeKey) => {
     const baseShopUrl = getBaseShopUrlForType(typeKey);
-    const fullResultHref =
-      typeof window !== "undefined" && typeKey && RESULT_TYPE_KEYS.includes(typeKey)
-        ? `${window.location.origin}/result?type=${encodeURIComponent(typeKey)}&mode=full`
-        : LINE_OFFICIAL_URL;
+    const fullResultHref = buildMagicAutoResultUrl(true) || LINE_OFFICIAL_URL;
     const header = (
       <>
         <div className="result-label">YOUR OSHI COLOR</div>
