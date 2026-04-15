@@ -1369,29 +1369,26 @@ export default function App() {
     (async () => {
       try {
         const liff = (await import("@line/liff")).default;
-        // 外部ブラウザで勝手に LINE ログイン画面へ飛ばさない
         await liff.init({ liffId: REACT_APP_LIFF_ID, withLoginOnExternalBrowser: false });
         if (cancelled) return;
-        const inLineUi = liff.isInClient() || isLikelyLineInAppBrowser();
-        if (!inLineUi) return;
-        if (!liff.isLoggedIn()) return;
-        const idToken = liff.getIDToken();
-        if (!idToken) return;
+        // sendMessages は LINE クライアント内でのみ動作する
+        if (!liff.isInClient()) return;
 
         const resData = results[resultKey];
-        const diagnosisText = resultModeFull
-          ? resData.fullBody
-          : `${resData.teaserFree}\n\n${resData.hookBeforeLock}`;
+        const diagnosisText = `${resData.teaserFree}\n\n${resData.hookBeforeLock}`;
+        const base = (publicUrl || "").replace(/\/$/, "");
+        const resultUrl = `${window.location.origin}${base}/result?type=${encodeURIComponent(resultKey)}&mode=free`;
 
-        const res = await fetch(`${window.location.origin}/api/line/push-result`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ idToken, resultType: resultKey, diagnosisText })
-        });
-        if (res.ok) linePushSentRef.current = true;
+        await liff.sendMessages([
+          {
+            type: "text",
+            text: `${diagnosisText}\n\n🔗 結果を見る：${resultUrl}`
+          }
+        ]);
+        linePushSentRef.current = true;
       } catch (e) {
         if (process.env.NODE_ENV === "development") {
-          console.warn("[line push]", e);
+          console.warn("[liff.sendMessages]", e);
         }
       }
     })();
@@ -1399,7 +1396,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [screen, resultKey, resultModeFull]);
+  }, [screen, resultKey]);
 
   // liff_pending_push の古いデータをクリア（旧 liff.login() リダイレクト方式の残骸）
   useEffect(() => {
