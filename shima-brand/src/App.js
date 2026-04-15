@@ -51,6 +51,24 @@ function getLineQrSrc() {
   return `https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=8&data=${encodeURIComponent(LINE_OFFICIAL_URL)}`;
 }
 
+/**
+ * 診断で確定した色を URL に埋めて LINE 側へ渡す。
+ * localStorage 依存ではなく type クエリ優先で着地を固定する。
+ */
+function buildLineResultUrl(typeKey, mode = "full") {
+  if (!typeKey || !RESULT_TYPE_KEYS.includes(typeKey)) return "";
+  const prefix = (publicUrl || "").replace(/\/$/, "");
+  const qs = `?auto=true&type=${encodeURIComponent(typeKey)}&mode=${mode === "free" ? "free" : "full"}`;
+  const appPath = `${prefix}/result${qs}`;
+  if (REACT_APP_LIFF_ID) {
+    return `https://liff.line.me/${REACT_APP_LIFF_ID}${appPath}`;
+  }
+  if (typeof window !== "undefined") {
+    return `${window.location.origin}${appPath}`;
+  }
+  return appPath;
+}
+
 /** 回答スコアのみで判定。同点時は固定の優先順（URLには依存しない） */
 function computeResultFromScores(sc) {
   const max = Math.max(...RESULT_TYPE_KEYS.map((k) => sc[k] || 0));
@@ -1110,6 +1128,27 @@ const styles = `
     min-height: 58px;
     line-height: 1.3;
   }
+  .line-result-open-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: min(92vw, 380px);
+    min-height: 56px;
+    border-radius: 999px;
+    text-decoration: none;
+    margin-top: 12px;
+    padding: 14px 18px;
+    color: #fff;
+    font-size: clamp(14px, 3.9vw, 16px);
+    font-weight: 800;
+    line-height: 1.35;
+    background: linear-gradient(135deg, #4f46e5, #9333ea);
+    box-shadow: 0 10px 30px rgba(79, 70, 229, 0.38);
+    border: 1px solid rgba(255, 255, 255, 0.35);
+  }
+  .line-result-open-btn:active {
+    transform: scale(0.98);
+  }
   .line-gate-spinner {
     width: 40px;
     height: 40px;
@@ -1370,7 +1409,9 @@ export default function App() {
   }, [screen, resultKey, resultModeFull]);
 
   const lineQrSrc = getLineQrSrc();
-  const renderLineAcquisitionBlock = () => (
+  const renderLineAcquisitionBlock = (typeKey) => {
+    const lineResultUrl = buildLineResultUrl(typeKey, "full");
+    return (
     <div className="line-cta-hero">
       <p className="line-cta-hero-title">{LINE_BRAND}</p>
       <p className="line-cta-hero-sub">
@@ -1380,8 +1421,14 @@ export default function App() {
       <a className="line-cta-huge-btn" href={LINE_OFFICIAL_URL} target="_blank" rel="noopener noreferrer">
         友だち追加する（公式LINE）
       </a>
+      {lineResultUrl && (
+        <a className="line-result-open-btn" href={lineResultUrl} target="_blank" rel="noopener noreferrer">
+          LINEでこの推し色結果を開く
+        </a>
+      )}
     </div>
-  );
+    );
+  };
 
   const renderOshiResultCard = (res, isFull, typeKey) => {
     const baseShopUrl = getBaseShopUrlForType(typeKey);
@@ -1458,7 +1505,7 @@ export default function App() {
             <div className="lock-title">LINE登録後はリッチメニューから色別の無料鑑定を受け取れます。</div>
           </div>
         </div>
-        {renderLineAcquisitionBlock()}
+        {renderLineAcquisitionBlock(typeKey)}
         {renderBaseCta()}
         <div className="result-retry-row">
           <button type="button" className="retry-btn" onClick={resetDiagnosis}>
