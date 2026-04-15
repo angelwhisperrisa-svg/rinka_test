@@ -60,9 +60,6 @@ function buildLineResultUrl(typeKey, mode = "full") {
   const prefix = (publicUrl || "").replace(/\/$/, "");
   const qs = `?auto=true&type=${encodeURIComponent(typeKey)}&mode=${mode === "free" ? "free" : "full"}`;
   const appPath = `${prefix}/result${qs}`;
-  if (REACT_APP_LIFF_ID) {
-    return `https://liff.line.me/${REACT_APP_LIFF_ID}${appPath}`;
-  }
   if (typeof window !== "undefined") {
     return `${window.location.origin}${appPath}`;
   }
@@ -1132,11 +1129,11 @@ const styles = `
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: min(92vw, 380px);
+    width: min(92vw, 420px);
     min-height: 56px;
     border-radius: 999px;
     text-decoration: none;
-    margin-top: 12px;
+    margin-top: 14px;
     padding: 14px 18px;
     color: #fff;
     font-size: clamp(14px, 3.9vw, 16px);
@@ -1415,12 +1412,9 @@ export default function App() {
     <div className="line-cta-hero">
       <p className="line-cta-hero-title">{LINE_BRAND}</p>
       <p className="line-cta-hero-sub">
-        フル鑑定の続きはLINEで受け取れます。まずは公式LINEを登録してください。QRコードを読み取るか、下のボタンで友だち追加できます。
+        フル鑑定の続きはLINEで受け取れます。まずはQRコードで公式LINEを登録し、下のボタンでこの推し色結果を開いてください。
       </p>
       <img className="line-qr-big" src={lineQrSrc} alt={`${LINE_BRAND}のQRコード`} width={300} height={300} />
-      <a className="line-cta-huge-btn" href={LINE_OFFICIAL_URL} target="_blank" rel="noopener noreferrer">
-        友だち追加する（公式LINE）
-      </a>
       {lineResultUrl && (
         <a className="line-result-open-btn" href={lineResultUrl} target="_blank" rel="noopener noreferrer">
           LINEでこの推し色結果を開く
