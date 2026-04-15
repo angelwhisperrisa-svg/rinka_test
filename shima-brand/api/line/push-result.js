@@ -166,7 +166,20 @@ export default async function handler(req, res) {
 
   const richMenuLinkResult = await linkUserRichMenu({ accessToken, lineUserId, resultType });
   if (richMenuLinkResult.ok === false) {
-    console.warn("LINE rich menu link failed", richMenuLinkResult.status, richMenuLinkResult.detail);
+    console.error("LINE rich menu link failed", richMenuLinkResult.status, richMenuLinkResult.detail);
+    res.status(502).json({
+      error: "LINE rich menu link failed",
+      status: richMenuLinkResult.status,
+      detail: richMenuLinkResult.detail
+    });
+    return;
+  }
+  if (richMenuLinkResult.skipped) {
+    res.status(500).json({
+      error: "LINE rich menu id is not configured for this result type",
+      resultType
+    });
+    return;
   }
 
   res.status(200).json({ ok: true, richMenuLinkResult });
