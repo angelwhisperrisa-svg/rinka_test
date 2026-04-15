@@ -1338,7 +1338,8 @@ export default function App() {
     (async () => {
       try {
         const liff = (await import("@line/liff")).default;
-        await liff.init({ liffId: REACT_APP_LIFF_ID, withLoginOnExternalBrowser: true });
+        // 外部ブラウザで勝手に LINE ログイン画面へ飛ばさない
+        await liff.init({ liffId: REACT_APP_LIFF_ID, withLoginOnExternalBrowser: false });
         if (cancelled) return;
         const inLineUi = liff.isInClient() || isLikelyLineInAppBrowser();
         if (!inLineUi || !liff.isLoggedIn()) return;
