@@ -15,6 +15,17 @@ const LINE_BRAND = "薫凛香房 公式LINE";
 /** 診断タイプ保持（リッチメニュー等の /result?auto=true から分岐するため） */
 const OSHI_RESULT_STORAGE_KEY = "shima_oshi_result_v1";
 
+function readStoredOshiType() {
+  try {
+    if (typeof window === "undefined") return null;
+    const raw = window.localStorage.getItem(OSHI_RESULT_STORAGE_KEY);
+    if (raw && RESULT_TYPE_KEYS.includes(raw)) return raw;
+  } catch (_) {
+    /* ignore */
+  }
+  return null;
+}
+
 function normalizeTypeKey(v) {
   if (!v || typeof v !== "string") return null;
   const t = v.trim().toLowerCase();
@@ -114,17 +125,19 @@ function parseInitialResultRoute() {
 
   if (isAuto) {
     const explicitType = normalizeTypeKey(params.get("type"));
+    const storedType = normalizeTypeKey(readStoredOshiType());
     const modeParam = (params.get("mode") || "full").toLowerCase();
     const modeFull = modeParam !== "free";
-    if (explicitType) {
+    const resolvedType = explicitType || storedType;
+    if (resolvedType) {
       return {
         showResult: true,
-        resultType: explicitType,
+        resultType: resolvedType,
         modeFull,
         replaceUrlWithCanonical: true
       };
     }
-    // auto=true で type 未指定は誤色防止のため結果を出さない
+    // type も保存結果も無い場合のみ空振り
     return { ...empty, autoMissingStorage: true };
   }
 
@@ -1179,7 +1192,7 @@ export default function App() {
     if (p.autoMissingStorage) {
       deepLinkConsumedRef.current = true;
       shouldSendLinePushRef.current = false;
-      setScreen("line_pending");
+      setScreen("start");
       return;
     }
     if (p.showResult && p.resultType) {
@@ -1558,16 +1571,6 @@ export default function App() {
               あなたにふさわしい推し色を教えてくれる。
             </p>
           </header>
-
-          {screen === "line_pending" && (
-            <section className="card start-screen">
-              <p className="start-text">
-                LINEの推し色結果を表示するための情報が見つかりませんでした。診断完了画面の
-                「LINEでこの推し色結果を開く」ボタンから開くと、同じ色で表示できます。
-              </p>
-              <button className="start-btn" onClick={() => setScreen("start")}>診断トップへ戻る</button>
-            </section>
-          )}
 
           {screen === "start" && (
             <section className="card start-screen">
