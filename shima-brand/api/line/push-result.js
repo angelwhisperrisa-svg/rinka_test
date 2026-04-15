@@ -38,6 +38,13 @@ const PUSH_BODY = {
 };
 
 const MAX_TEXT = 4800;
+const RICH_MENU_ID_BY_TYPE = {
+  mint: process.env.LINE_RICHMENU_MINT || "",
+  rose: process.env.LINE_RICHMENU_ROSE || "",
+  lavender: process.env.LINE_RICHMENU_LAVENDER || "",
+  ivory: process.env.LINE_RICHMENU_IVORY || "",
+  skyblue: process.env.LINE_RICHMENU_SKYBLUE || ""
+};
 
 function splitLineMessages(text) {
   const t = text.trim();
@@ -63,6 +70,24 @@ async function verifyIdToken(idToken, channelId) {
   if (!r.ok) return null;
   const data = await r.json();
   return data.sub || null;
+}
+
+async function linkUserRichMenu({ accessToken, lineUserId, resultType }) {
+  const richMenuId = RICH_MENU_ID_BY_TYPE[resultType];
+  if (!richMenuId) return { skipped: true };
+
+  const endpoint = `https://api.line.me/v2/bot/user/${encodeURIComponent(lineUserId)}/richmenu/${encodeURIComponent(richMenuId)}`;
+  const r = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`
+    }
+  });
+  if (!r.ok) {
+    const detail = await r.text();
+    return { ok: false, status: r.status, detail: detail.slice(0, 500) };
+  }
+  return { ok: true };
 }
 
 export default async function handler(req, res) {
@@ -139,5 +164,10 @@ export default async function handler(req, res) {
     return;
   }
 
-  res.status(200).json({ ok: true });
+  const richMenuLinkResult = await linkUserRichMenu({ accessToken, lineUserId, resultType });
+  if (richMenuLinkResult.ok === false) {
+    console.warn("LINE rich menu link failed", richMenuLinkResult.status, richMenuLinkResult.detail);
+  }
+
+  res.status(200).json({ ok: true, richMenuLinkResult });
 }
