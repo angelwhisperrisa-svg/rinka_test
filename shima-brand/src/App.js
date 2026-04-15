@@ -672,29 +672,52 @@ const styles = `
     margin-top: clamp(24px, 5vh, 40px);
     width: 100%;
   }
+  .result-base-guide {
+    text-align: center;
+    margin: 0 0 12px;
+  }
+  .result-base-guide-title {
+    margin: 0;
+    font-size: clamp(15px, 4.4vw, 18px);
+    font-weight: 900;
+    color: #4c1d95;
+    letter-spacing: 0.01em;
+    line-height: 1.45;
+  }
+  .result-base-guide-sub {
+    margin: 6px 0 0;
+    font-size: clamp(12px, 3.3vw, 14px);
+    color: #6d28d9;
+    line-height: 1.55;
+  }
   .result-base-cta {
     display: flex;
     align-items: center;
     justify-content: center;
     width: 100%;
     text-decoration: none;
-    border-radius: 16px;
-    padding: 16px 18px;
-    font-size: clamp(15px, 4vw, 17px);
+    border-radius: 18px;
+    padding: 20px 20px;
+    font-size: clamp(17px, 4.8vw, 20px);
     font-weight: 800;
     color: #fff;
     background: linear-gradient(135deg, #4f46e5, #9333ea);
-    box-shadow: 0 14px 36px rgba(79, 70, 229, 0.4);
+    box-shadow: 0 16px 42px rgba(79, 70, 229, 0.46), 0 0 28px rgba(147, 51, 234, 0.25);
     border: 1px solid rgba(255, 255, 255, 0.35);
-    min-height: 56px;
+    min-height: 72px;
     line-height: 1.35;
     transition: transform 0.18s ease, box-shadow 0.18s ease;
+    animation: baseCtaPulse 2.8s ease-in-out infinite;
   }
   .result-base-cta:hover {
-    box-shadow: 0 18px 42px rgba(147, 51, 234, 0.38);
+    box-shadow: 0 20px 50px rgba(147, 51, 234, 0.42);
   }
   .result-base-cta:active {
     transform: scale(0.98);
+  }
+  @keyframes baseCtaPulse {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-1px) scale(1.015); }
   }
   .result-body-sep {
     border: none;
@@ -1358,6 +1381,22 @@ export default function App() {
 
   const renderOshiResultCard = (res, isFull, typeKey) => {
     const baseShopUrl = getBaseShopUrlForType(typeKey);
+    const renderBaseCta = () => (
+      <div className="result-base-cta-wrap">
+        <div className="result-base-guide">
+          <p className="result-base-guide-title">LINE登録の次は、こちらからフル鑑定へ</p>
+          <p className="result-base-guide-sub">あなたの推し色に合わせた詳細診断をBASEで確認できます。</p>
+        </div>
+        <a
+          className="result-base-cta"
+          href={baseShopUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          {`▶ BASEで${res.name}のフル鑑定を見る`}
+        </a>
+      </div>
+    );
     const header = (
       <>
         <div className="result-label">YOUR OSHI COLOR</div>
@@ -1388,16 +1427,7 @@ export default function App() {
             </div>
           </div>
           {renderLineAcquisitionBlock()}
-          <div className="result-base-cta-wrap">
-            <a
-              className="result-base-cta"
-              href={baseShopUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              {`BASE：${res.name}のフル鑑定`}
-            </a>
-          </div>
+          {renderBaseCta()}
           <div className="result-retry-row">
             <button type="button" className="retry-btn" onClick={resetDiagnosis}>
               もう一度、推し色を見つける
@@ -1426,16 +1456,7 @@ export default function App() {
           </div>
         </div>
         {renderLineAcquisitionBlock()}
-        <div className="result-base-cta-wrap">
-          <a
-            className="result-base-cta"
-            href={baseShopUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            {`BASE：${res.name}のフル鑑定`}
-          </a>
-        </div>
+        {renderBaseCta()}
         <div className="result-retry-row">
           <button type="button" className="retry-btn" onClick={resetDiagnosis}>
             もう一度、推し色を見つける
