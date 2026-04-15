@@ -46,10 +46,7 @@ function getLineQrSrc() {
   return `https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=8&data=${encodeURIComponent(LINE_OFFICIAL_URL)}`;
 }
 
-/**
- * 診断で確定した色を URL に埋めて LINE 側へ渡す。
- * localStorage 依存ではなく type クエリ優先で着地を固定する。
- */
+/** 診断で確定した色を URL に埋めて LINE 側へ渡す。 */
 function buildLineResultUrl(typeKey, mode = "full") {
   const normalizedType = normalizeTypeKey(typeKey);
   if (!normalizedType) return "";
@@ -109,25 +106,6 @@ function parseInitialResultRoute() {
   if (!isResultPath) return empty;
 
   const params = new URLSearchParams(window.location.search);
-  const autoRaw = params.get("auto");
-  const isAuto = autoRaw === "true" || autoRaw === "1";
-
-  if (isAuto) {
-    const explicitType = normalizeTypeKey(params.get("type"));
-    const modeParam = (params.get("mode") || "full").toLowerCase();
-    const modeFull = modeParam !== "free";
-    if (explicitType) {
-      return {
-        showResult: true,
-        resultType: explicitType,
-        modeFull,
-        replaceUrlWithCanonical: true
-      };
-    }
-    // type 未指定の auto は誤色防止のため結果を表示しない
-    return { ...empty, autoMissingStorage: true };
-  }
-
   const type = normalizeTypeKey(params.get("type"));
   const mode = params.get("mode");
   if (!type) return empty;
@@ -1176,12 +1154,6 @@ export default function App() {
   useLayoutEffect(() => {
     if (deepLinkConsumedRef.current) return;
     const p = pendingDeepLinkRef.current;
-    if (p.autoMissingStorage) {
-      deepLinkConsumedRef.current = true;
-      shouldSendLinePushRef.current = false;
-      setScreen("start");
-      return;
-    }
     if (p.showResult && p.resultType) {
       deepLinkConsumedRef.current = true;
       shouldSendLinePushRef.current = false;
