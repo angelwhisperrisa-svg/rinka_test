@@ -6,6 +6,7 @@ const VIDEO = {
   final: `${publicUrl}/videos/C_Oshiiro_Thank_you_and_invite_1080p.mp4`
 };
 const LINE_OFFICIAL_URL = "https://line.me/R/ti/p/@877xrsvw";
+const LINE_OA_ID = process.env.REACT_APP_LINE_OA_ID || "@877xrsvw";
 const BASE_FULL_URL = process.env.REACT_APP_BASE_FULL_URL || "https://thebase.in/";
 
 const RESULT_TYPE_KEYS = ["mint", "rose", "lavender", "ivory", "skyblue"];
@@ -1427,20 +1428,16 @@ export default function App() {
   };
 
   const renderOshiResultCard = (res, isFull, typeKey) => {
-    const baseShopUrl = getBaseShopUrlForType(typeKey);
-    const renderBaseCta = () => (
+    const lineOaMessageUrl = `https://line.me/R/oaMessage/${encodeURIComponent(LINE_OA_ID)}/?text=${encodeURIComponent(res.name)}`;
+    const renderLineSendBtn = () => (
       <div className="result-base-cta-wrap">
-        <div className="result-base-guide">
-          <p className="result-base-guide-title">LINE登録の次は、こちらからフル鑑定へ</p>
-          <p className="result-base-guide-sub">あなたの推し色に合わせた詳細診断をBASEで確認できます。</p>
-        </div>
         <a
           className="result-base-cta"
-          href={baseShopUrl}
+          href={lineOaMessageUrl}
           target="_blank"
           rel="noopener noreferrer"
         >
-          {`▶ BASEで${res.name}のフル鑑定を見る`}
+          {`▶ LINEに${res.name}の結果を送る`}
         </a>
       </div>
     );
@@ -1473,7 +1470,7 @@ export default function App() {
               <p className="result-free-chunk">{res.fullBody}</p>
             </div>
           </div>
-          {renderBaseCta()}
+          {renderLineSendBtn()}
         </section>
       );
     }
@@ -1497,7 +1494,7 @@ export default function App() {
           </div>
         </div>
         {renderLineAcquisitionBlock(typeKey)}
-        {renderBaseCta()}
+        {renderLineSendBtn()}
         <div className="result-retry-row">
           <button type="button" className="retry-btn" onClick={resetDiagnosis}>
             もう一度、推し色を見つける
