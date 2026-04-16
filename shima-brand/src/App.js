@@ -7,7 +7,6 @@ const VIDEO = {
 };
 const LINE_OFFICIAL_URL = "https://line.me/R/ti/p/@877xrsvw";
 const LINE_OA_ID = process.env.REACT_APP_LINE_OA_ID || "@877xrsvw";
-const BASE_FULL_URL = process.env.REACT_APP_BASE_FULL_URL || "https://thebase.in/";
 
 const RESULT_TYPE_KEYS = ["mint", "rose", "lavender", "ivory", "skyblue"];
 const REACT_APP_LIFF_ID = process.env.REACT_APP_LIFF_ID || "";
