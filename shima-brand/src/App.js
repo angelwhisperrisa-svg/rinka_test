@@ -57,21 +57,6 @@ function getLineQrSrc() {
   return `https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=8&data=${encodeURIComponent(LINE_OFFICIAL_URL)}`;
 }
 
-/**
- * 診断で確定した色を URL に埋めて LINE 側へ渡す。
- * localStorage 依存ではなく type クエリ優先で着地を固定する。
- */
-
-  const normalizedType = normalizeTypeKey(typeKey);
-  if (!normalizedType) return "";
-  const prefix = (publicUrl || "").replace(/\/$/, "");
-  const qs = `?type=${encodeURIComponent(normalizedType)}&mode=${mode === "free" ? "free" : "full"}`;
-  const appPath = `${prefix}/result${qs}`;
-  if (typeof window !== "undefined") {
-    return `${window.location.origin}${appPath}`;
-  }
-  return appPath;
-}
 
 /** 回答スコアのみで判定。同点時は固定の優先順（URLには依存しない） */
 function computeResultFromScores(sc) {
