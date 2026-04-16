@@ -1181,6 +1181,7 @@ export default function App() {
   const welcomeEngagedRef = useRef(false);
   const linePushSentRef = useRef(false);
   const liffRef = useRef(null);
+  const [liffReady, setLiffReady] = useState(false);
 
   const progress = Math.round((currentQ / questions.length) * 100);
   const currentQuestion = questions[currentQ];
@@ -1197,7 +1198,7 @@ export default function App() {
       try {
         const liff = (await import("@line/liff")).default;
         await liff.init({ liffId: REACT_APP_LIFF_ID, withLoginOnExternalBrowser: false });
-        if (!cancelled) liffRef.current = liff;
+        if (!cancelled) { liffRef.current = liff; setLiffReady(true); }
       } catch (e) {
         console.warn("[liff.init]", String(e));
       }
@@ -1384,12 +1385,10 @@ export default function App() {
     if (screen !== "result" || !resultKey) return;
     if (linePushSentRef.current) return;
     if (!shouldSendLinePushRef.current) return;
+    if (!liffReady || !liffRef.current) return;
     shouldSendLinePushRef.current = false;
 
     const liff = liffRef.current;
-    if (!liff) return;
-    if (!liff.isInClient()) return;
-
     const resData = results[resultKey];
     const diagnosisText = `${resData.teaserFree}\n\n${resData.hookBeforeLock}`;
     const base = (publicUrl || "").replace(/\/$/, "");
@@ -1403,7 +1402,7 @@ export default function App() {
     }).catch((e) => {
       console.warn("[liff.sendMessages]", String(e));
     });
-  }, [screen, resultKey]);
+  }, [screen, resultKey, liffReady]);
 
   // liff_pending_push の古いデータをクリア（旧 liff.login() リダイレクト方式の残骸）
   useEffect(() => {
