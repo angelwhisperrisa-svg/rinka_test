@@ -83,16 +83,6 @@ function computeResultFromScores(sc) {
 /**
  * 各色の BASE（有料・フル鑑定）URL。ボタンは常にこの関数だけを参照する（色ごとの if 分岐をここに集約）。
  */
-function getBaseShopUrlForType(typeKey) {
-  const fallback = process.env.REACT_APP_BASE_FULL_URL || BASE_FULL_URL;
-  if (!typeKey || !RESULT_TYPE_KEYS.includes(typeKey)) return fallback;
-  if (typeKey === "mint") return process.env.REACT_APP_BASE_MINT || fallback;
-  if (typeKey === "rose") return process.env.REACT_APP_BASE_ROSE || fallback;
-  if (typeKey === "lavender") return process.env.REACT_APP_BASE_LAVENDER || fallback;
-  if (typeKey === "ivory") return process.env.REACT_APP_BASE_IVORY || fallback;
-  if (typeKey === "skyblue") return process.env.REACT_APP_BASE_SKYBLUE || fallback;
-  return fallback;
-}
 
 /**
  * リッチメニュー等で開いても `liff.isInClient()` が false になる端末がある。
