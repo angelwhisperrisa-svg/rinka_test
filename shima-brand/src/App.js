@@ -1252,11 +1252,19 @@ export default function App() {
   useEffect(() => {
     if (screen !== "calculating") return;
     const v = finalVideoRef.current;
-    if (!v) return;
+    if (!v) {
+      setScreen("result");
+      return;
+    }
     v.muted = false;
     v.currentTime = 0;
     const p = v.play();
-    if (p && typeof p.catch === "function") p.catch(() => {});
+    if (p && typeof p.catch === "function") {
+      p.catch(() => {
+        // 音あり自動再生がブロックされた場合は直接resultへ
+        setScreen("result");
+      });
+    }
   }, [screen]);
 
   const handleWelcomeSoundOn = () => {
