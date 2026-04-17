@@ -1394,11 +1394,12 @@ export default function App() {
 
             if (!delivered) {
               const idToken = liff.getIDToken();
-              if (idToken) {
+              const accessToken = liff.getAccessToken();
+              if (idToken || accessToken) {
                 const res = await fetch(`${window.location.origin}/api/line/push-result`, {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ idToken, resultType: confirmedResultKey })
+                  body: JSON.stringify({ idToken, accessToken, resultType: confirmedResultKey })
                 });
                 if (!res.ok) {
                   const detail = await res.text();
@@ -1407,7 +1408,7 @@ export default function App() {
                 console.log("[liff.pushResult] sent from server fallback:", confirmedResultKey);
                 delivered = true;
               } else {
-                console.warn("[liff.pushResult] skipped: missing idToken");
+                console.warn("[liff.pushResult] skipped: missing idToken and accessToken");
               }
             }
 

@@ -72,6 +72,17 @@ async function verifyIdToken(idToken, channelId) {
   return data.sub || null;
 }
 
+async function getUserIdFromAccessToken(accessToken) {
+  const r = await fetch("https://api.line.me/v2/profile", {
+    headers: {
+      Authorization: `Bearer ${accessToken}`
+    }
+  });
+  if (!r.ok) return null;
+  const data = await r.json();
+  return data.userId || null;
+}
+
 async function linkUserRichMenu({ accessToken, lineUserId, resultType }) {
   const richMenuId = RICH_MENU_ID_BY_TYPE[resultType];
   if (!richMenuId) return { ok: false, skipped: true, reason: "missing_richmenu_id", richMenuId: "" };
@@ -104,10 +115,10 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  const accessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+  const channelAccessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN;
   const channelId = process.env.LINE_CHANNEL_ID;
-  if (!accessToken || !channelId) {
-    res.status(500).json({ error: "Server missing LINE_CHANNEL_ACCESS_TOKEN or LINE_CHANNEL_ID" });
+  if (!channelAccessToken) {
+    res.status(500).json({ error: "Server missing LINE_CHANNEL_ACCESS_TOKEN" });
     return;
   }
 
@@ -121,15 +132,23 @@ module.exports = async function handler(req, res) {
     }
   }
 
-  const { idToken, resultType, diagnosisText } = payload || {};
-  if (!idToken || typeof idToken !== "string" || !VALID_TYPES.includes(resultType)) {
-    res.status(400).json({ error: "Invalid idToken or resultType" });
+  const { idToken, accessToken, resultType, diagnosisText } = payload || {};
+  const hasIdToken = typeof idToken === "string" && idToken.length > 0;
+  const hasAccessToken = typeof accessToken === "string" && accessToken.length > 0;
+  if ((!hasIdToken && !hasAccessToken) || !VALID_TYPES.includes(resultType)) {
+    res.status(400).json({ error: "Invalid token payload or resultType" });
     return;
   }
 
-  const lineUserId = await verifyIdToken(idToken, channelId);
+  let lineUserId = null;
+  if (hasIdToken && channelId) {
+    lineUserId = await verifyIdToken(idToken, channelId);
+  }
+  if (!lineUserId && hasAccessToken) {
+    lineUserId = await getUserIdFromAccessToken(accessToken);
+  }
   if (!lineUserId) {
-    res.status(401).json({ error: "Invalid or expired id token" });
+    res.status(401).json({ error: "Invalid or expired id/access token" });
     return;
   }
 
@@ -151,7 +170,7 @@ module.exports = async function handler(req, res) {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${accessToken}`
+      Authorization: `Bearer ${channelAccessToken}`
     },
     body: JSON.stringify({ to: lineUserId, messages })
   });
@@ -167,7 +186,7 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  const richMenuLinkResult = await linkUserRichMenu({ accessToken, lineUserId, resultType });
+  const richMenuLinkResult = await linkUserRichMenu({ accessToken: channelAccessToken, lineUserId, resultType });
   console.info("LINE rich menu link trace", {
     resultType,
     richMenuId: richMenuLinkResult.richMenuId || "",
