@@ -5,9 +5,10 @@ const VIDEO = {
   welcome: `${publicUrl}/videos/A_Oshiiro_welcome_1080p.mp4`,
   final: `${publicUrl}/videos/C_Oshiiro_Thank_you_and_invite_1080p.mp4`
 };
-/** 女神動画の次に約15秒表示する「診断内容」ビジュアル（同一パスに PNG 等を置けば差し替え可） */
-const INTRO_DIAGNOSIS_IMAGE = `${publicUrl}/images/shindan-rainbow-intro.svg`;
+/** 中間表示（start と同じレインボーサークル）の秒数。その後 start へ自動遷移 */
 const INTRO_DIAGNOSIS_MS = 15000;
+/** 無音のまま welcome 動画が終わったあと、中間表示へ進むまでの待ち時間 */
+const WELCOME_MUTED_END_DELAY_MS = 7000;
 const LINE_OFFICIAL_URL = "https://line.me/R/ti/p/@877xrsvw";
 const BASE_FULL_URL = process.env.REACT_APP_BASE_FULL_URL || "https://thebase.in/";
 
@@ -1028,13 +1029,7 @@ const styles = `
     width: 100%;
     max-height: min(76vh, 680px);
   }
-  .intro-diagnosis-img {
-    width: min(92vw, 540px);
-    max-height: min(70vh, 620px);
-    height: auto;
-    object-fit: contain;
-    border-radius: 18px;
-    box-shadow: 0 18px 52px rgba(0, 0, 0, 0.38), 0 0 0 1px rgba(255, 255, 255, 0.07);
+  .intro-diagnosis-wrap .orb {
     animation: introDiagnosisIn 0.65s ease-out both;
   }
   @keyframes introDiagnosisIn {
@@ -1482,20 +1477,6 @@ export default function App() {
     }
   };
 
-  /** 診断スタート画面へは行かず、女神＝音声スタート（ミュート再生）に戻す */
-  const resetWelcomeToVoiceStart = () => {
-    welcomeEngagedRef.current = false;
-    setWelcomeMuted(true);
-    setWelcomeExiting(false);
-    const v = welcomeVideoRef.current;
-    if (v) {
-      v.muted = true;
-      v.currentTime = 0;
-      const p = v.play();
-      if (p && typeof p.catch === "function") p.catch(() => {});
-    }
-  };
-
   const handleWelcomeEnded = () => {
     const v = welcomeVideoRef.current;
     if (welcomeEngagedRef.current) {
@@ -1514,8 +1495,9 @@ export default function App() {
     }
     welcomeSilentSkipTimerRef.current = window.setTimeout(() => {
       welcomeSilentSkipTimerRef.current = null;
-      resetWelcomeToVoiceStart();
-    }, 5000);
+      setWelcomeExiting(false);
+      setScreen("intro");
+    }, WELCOME_MUTED_END_DELAY_MS);
   };
 
   const startQuiz = () => {
@@ -1945,13 +1927,13 @@ export default function App() {
         )}
 
         {screen === "intro" && (
-          <div className="video-stage video-stage--intro" role="img" aria-label="診断内容のご案内">
+          <div className="video-stage video-stage--intro">
             <div className="intro-diagnosis-wrap">
-              <img
-                className="intro-diagnosis-img"
-                src={INTRO_DIAGNOSIS_IMAGE}
-                alt="レインボーサークルの診断内容"
-              />
+              <div className="orb">
+                <div className="orb-aurora" />
+                <div className="orb-flow" />
+                <span className="orb-heart">💜</span>
+              </div>
             </div>
           </div>
         )}
