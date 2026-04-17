@@ -18,11 +18,15 @@ const REACT_APP_LIFF_ID = process.env.REACT_APP_LIFF_ID || "";
 const PENDING_LINE_SEND_KEY = "pendingLineSend";
 
 /**
- * Instagram→LINE→LIFF 診断完了時: ログイン確認 → getProfile 後、/api/line/push-result で Push（idToken 優先で Messaging API と同一ユーザーを確実に）。
+ * Instagram→LINE→LIFF 診断完了時: /api/line/push-result へ必ず fetch を試行。
+ * 未ログイン時は identity なしのプローブ POST の後に liff.login()。ログイン復帰後は App 内の useEffect が pending を見て handleComplete を再実行する。
  * @returns {Promise<{ ok: true } | { ok: false, kind: "login_redirect" } | { ok: false, kind: "error", message: string }>}
  */
 async function handleComplete(resultKey) {
+  console.log("[handleComplete] start", { resultKey, hasLiffId: Boolean(REACT_APP_LIFF_ID) });
+
   if (!REACT_APP_LIFF_ID || !RESULT_TYPE_KEYS.includes(resultKey)) {
+    console.log("[handleComplete] return: invalid LIFF or resultKey");
     return { ok: false, kind: "error", message: "診断結果の送信設定が無効です。" };
   }
   let liff;
@@ -31,8 +35,11 @@ async function handleComplete(resultKey) {
     await liff.init({ liffId: REACT_APP_LIFF_ID, withLoginOnExternalBrowser: false });
   } catch (e) {
     console.warn("[handleComplete] liff.init failed", e);
+    console.log("[handleComplete] return: liff.init failed");
     return { ok: false, kind: "error", message: "LINE連携の初期化に失敗しました。しばらくしてから再度お試しください。" };
   }
+
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
 
   if (!liff.isLoggedIn()) {
     try {
@@ -40,7 +47,19 @@ async function handleComplete(resultKey) {
     } catch (_) {
       /* ignore */
     }
+    console.log("calling push-result API");
+    try {
+      const probeRes = await fetch(`${origin}/api/line/push-result`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resultType: resultKey })
+      });
+      console.log("push-result response:", probeRes.status);
+    } catch (e) {
+      console.warn("[handleComplete] push-result probe fetch failed", e);
+    }
     liff.login();
+    console.log("[handleComplete] return: login_redirect (not logged in, after probe + liff.login)");
     return { ok: false, kind: "login_redirect" };
   }
 
@@ -50,16 +69,16 @@ async function handleComplete(resultKey) {
     userId = profile?.userId || null;
   } catch (e) {
     console.warn("[handleComplete] getProfile failed", e);
+    console.log("[handleComplete] return: getProfile failed");
     return { ok: false, kind: "error", message: "LINEのユーザー情報を取得できませんでした。LINEアプリから開き直してお試しください。" };
   }
 
   if (!userId) {
+    console.log("[handleComplete] return: empty userId");
     return { ok: false, kind: "error", message: "ユーザーIDを取得できませんでした。LINEアプリから開き直してお試しください。" };
   }
 
   console.log("userId:", userId);
-
-  const origin = typeof window !== "undefined" ? window.location.origin : "";
   let pushBody = { resultType: resultKey };
   try {
     const idToken = typeof liff.getIDToken === "function" ? liff.getIDToken() : "";
@@ -82,25 +101,30 @@ async function handleComplete(resultKey) {
   };
 
   try {
+    console.log("calling push-result API");
     let res = await fetch(`${origin}/api/line/push-result`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(pushBody)
     });
+    console.log("push-result response:", res.status);
     let { data } = await parsePushJson(res);
     if ((!res.ok || data.failure === true || data.success === false) && pushBody.idToken) {
       console.warn("[handleComplete] push-result (idToken) failed, retry with lineUserId", res.status, data);
+      console.log("calling push-result API");
       res = await fetch(`${origin}/api/line/push-result`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ resultType: resultKey, lineUserId: userId })
       });
+      console.log("push-result response:", res.status);
       const second = await parsePushJson(res);
       data = second.data;
     }
     if (!res.ok || data.failure === true || data.success === false) {
       console.warn("[handleComplete] push-result failure", res.status, data);
       const hint = typeof data.detail === "string" ? data.detail.slice(0, 120) : "";
+      console.log("[handleComplete] return: push-result failure", res.status);
       return {
         ok: false,
         kind: "error",
@@ -109,6 +133,7 @@ async function handleComplete(resultKey) {
     }
   } catch (e) {
     console.warn("[handleComplete] fetch failed", e);
+    console.log("[handleComplete] return: fetch exception");
     return { ok: false, kind: "error", message: "通信エラーが発生しました。通信状況をご確認のうえ、再度お試しください。" };
   }
 
@@ -117,6 +142,7 @@ async function handleComplete(resultKey) {
   } catch (_) {
     /* ignore */
   }
+  console.log("[handleComplete] return: ok true");
   return { ok: true };
 }
 
@@ -1593,6 +1619,65 @@ export default function App() {
       setLiffSaveLoading(false);
     }
   }, [screen]);
+
+  /** liff.login() 復帰後: sessionStorage の pending と結果が一致し、未送信なら handleComplete を自動再実行 */
+  useEffect(() => {
+    if (screen !== "result" || !REACT_APP_LIFF_ID) return undefined;
+    const rk = normalizeTypeKey(resultKeyRef.current || resultKey);
+    if (!rk) return undefined;
+
+    let pending = null;
+    try {
+      pending = normalizeTypeKey(window.sessionStorage.getItem(PENDING_LINE_SEND_KEY) || "");
+    } catch (_) {
+      return undefined;
+    }
+    if (!pending || pending !== rk) return undefined;
+    if (liffMsgSentRef.current) return undefined;
+    if (liffSaveInFlightRef.current) return undefined;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        liffSaveInFlightRef.current = true;
+        setLiffSaveLoading(true);
+        setLiffCompleteError("");
+        const liffMod = await import("@line/liff");
+        const liff = liffMod.default;
+        await liff.init({ liffId: REACT_APP_LIFF_ID, withLoginOnExternalBrowser: false });
+        if (cancelled) return;
+        if (!liff.isLoggedIn()) {
+          return;
+        }
+        if (liffMsgSentRef.current) return;
+        const out = await handleComplete(rk);
+        if (cancelled) return;
+        if (out.ok) {
+          liffMsgSentRef.current = true;
+          setLiffCompleteError("");
+          await openLineOfficialAccountLink();
+        } else if (out.kind === "login_redirect") {
+          /* 再ログインが必要な場合のみ */
+        } else if (out.message) {
+          setLiffCompleteError(out.message);
+        }
+      } catch (e) {
+        console.warn("[pending LINE send resume]", e);
+        if (!cancelled) {
+          setLiffCompleteError("送信処理でエラーが発生しました。もう一度ボタンからお試しください。");
+        }
+      } finally {
+        if (!cancelled) {
+          liffSaveInFlightRef.current = false;
+          setLiffSaveLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [screen, resultKey]);
 
   const RESULT_LINE_NEXT_COPY = `この先では、
 
