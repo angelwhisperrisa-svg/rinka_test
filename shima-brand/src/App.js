@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect, useLayoutEffect } from "react";
 
 const publicUrl = process.env.PUBLIC_URL || "";
 const VIDEO = {
@@ -660,6 +660,12 @@ const styles = `
     box-sizing: border-box;
   }
   .floating-note { margin-top: 2px; color: #999; font-size: 12px; }
+  .start-screen .start-quiz-entry {
+    width: 100%;
+    justify-content: center;
+    text-align: center;
+    margin-top: 12px;
+  }
 
   .progress-wrap { margin-bottom: 14px; }
   .progress-label {
@@ -929,28 +935,10 @@ const styles = `
     text-align: left;
   }
   .result-liff-error__text {
-    margin: 0 0 12px;
+    margin: 0;
     font-size: clamp(13px, 3.5vw, 15px);
     line-height: 1.55;
     font-weight: 600;
-  }
-  .result-liff-error__retry {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border: none;
-    border-radius: 999px;
-    padding: 10px 20px;
-    font-family: inherit;
-    font-size: clamp(13px, 3.4vw, 15px);
-    font-weight: 700;
-    cursor: pointer;
-    color: #fff;
-    background: linear-gradient(135deg, #7c3aed, #a855f7);
-  }
-  .result-liff-error__retry:disabled {
-    opacity: 0.65;
-    cursor: not-allowed;
   }
   .result-liff-sending {
     width: 96%;
@@ -1469,6 +1457,23 @@ export default function App() {
     }, WELCOME_MUTED_END_DELAY_MS);
   };
 
+  const startQuiz = () => {
+    setLiffCompleteError("");
+    setLiffSaveLoading(false);
+    liffSaveInFlightRef.current = false;
+    try {
+      if (typeof window !== "undefined") window.sessionStorage.removeItem(PENDING_LINE_SEND_KEY);
+    } catch (_) {
+      /* ignore */
+    }
+    liffMsgSentRef.current = false;
+    resultKeyRef.current = "";
+    setScreen("quiz");
+    setCurrentQ(0);
+    setScores(initialScores);
+    setResultKey("");
+  };
+
   const selectChoice = (scoreMap) => {
     const nextScores = { ...scores };
     Object.entries(scoreMap).forEach(([k, v]) => { nextScores[k] += v; });
@@ -1515,43 +1520,6 @@ export default function App() {
     setResultModeFull(false);
   };
 
-  /** 結果画面でユーザーが「送信／再試行」したときのみ。handleComplete はここからのみ呼ぶ。 */
-  const executePendingLiffSave = useCallback(async () => {
-    if (typeof window === "undefined") return false;
-    if (screen !== "result") return false;
-    const confirmedResultKey = resultKeyRef.current || resultKey;
-    if (!confirmedResultKey) return false;
-    if (!REACT_APP_LIFF_ID) return false;
-    if (liffMsgSentRef.current) return false;
-    if (liffSaveInFlightRef.current) return false;
-    liffSaveInFlightRef.current = true;
-
-    setLiffCompleteError("");
-    setLiffSaveLoading(true);
-    try {
-      const out = await handleComplete(confirmedResultKey);
-      if (out.ok) {
-        liffMsgSentRef.current = true;
-        setLiffCompleteError("");
-        return true;
-      }
-      if (out.kind === "login_redirect") {
-        return false;
-      }
-      if (out.message) {
-        setLiffCompleteError(out.message);
-      }
-      return false;
-    } catch (e) {
-      console.warn("[handleComplete] error:", String(e));
-      setLiffCompleteError("送信処理でエラーが発生しました。再度お試しください。");
-      return false;
-    } finally {
-      liffSaveInFlightRef.current = false;
-      setLiffSaveLoading(false);
-    }
-  }, [screen, resultKey]);
-
   useEffect(() => {
     if (screen !== "result") {
       setLiffCompleteError("");
@@ -1567,15 +1535,44 @@ export default function App() {
 
 をLINEでお届けします✨`;
 
+  /** handleComplete はこのハンドラ（＝「LINEで続きを受け取る🩷」の onClick）からのみ呼ぶ。結果画面表示だけでは送信しない。 */
   const handleLineContinueAfterResult = async () => {
     if (typeof window === "undefined") return;
-    const sent = await executePendingLiffSave();
-    if (!sent) return;
-
+    if (screen !== "result") return;
+    const confirmedResultKey = resultKeyRef.current || resultKey;
+    if (!confirmedResultKey) return;
     if (!REACT_APP_LIFF_ID) {
       window.location.assign(LINE_OFFICIAL_URL);
       return;
     }
+    if (liffMsgSentRef.current) return;
+    if (liffSaveInFlightRef.current) return;
+    liffSaveInFlightRef.current = true;
+
+    setLiffCompleteError("");
+    setLiffSaveLoading(true);
+    let sent = false;
+    try {
+      const out = await handleComplete(confirmedResultKey);
+      if (out.ok) {
+        liffMsgSentRef.current = true;
+        setLiffCompleteError("");
+        sent = true;
+      } else if (out.kind === "login_redirect") {
+        /* liff.login へ。送信はログイン後に同ボタンでもう一度 */
+      } else if (out.message) {
+        setLiffCompleteError(out.message);
+      }
+    } catch (e) {
+      console.warn("[handleComplete] error:", String(e));
+      setLiffCompleteError("送信処理でエラーが発生しました。もう一度ボタンからお試しください。");
+    } finally {
+      liffSaveInFlightRef.current = false;
+      setLiffSaveLoading(false);
+    }
+
+    if (!sent) return;
+
     try {
       const liff = (await import("@line/liff")).default;
       await liff.init({ liffId: REACT_APP_LIFF_ID, withLoginOnExternalBrowser: false });
@@ -1592,7 +1589,12 @@ export default function App() {
   const renderLineContinueBlock = () => (
     <div className="result-line-next-wrap">
       <p className="result-line-next-copy">{RESULT_LINE_NEXT_COPY}</p>
-      <button type="button" className="result-line-next-btn" onClick={handleLineContinueAfterResult}>
+      <button
+        type="button"
+        className="result-line-next-btn"
+        onClick={() => void handleLineContinueAfterResult()}
+        disabled={liffSaveLoading}
+      >
         LINEで続きを受け取る🩷
       </button>
     </div>
@@ -1772,6 +1774,10 @@ export default function App() {
                 7つの質問で、あなただけの「推し色」が見つかる。色には感情がある。あなたはどの色に選ばれるのでしょう。
               </p>
               <a className="start-btn" href={LINE_OFFICIAL_URL} target="_blank" rel="noopener noreferrer">LINE登録して診断を始める✨</a>
+              <button type="button" className="choice-btn start-quiz-entry" onClick={startQuiz}>
+                <span className="choice-icon" aria-hidden>✨</span>
+                <span>7問の診断を始める</span>
+              </button>
               <div className="floating-note">全7問・約1分</div>
             </section>
           )}
@@ -1811,14 +1817,6 @@ export default function App() {
               {liffCompleteError ? (
                 <div className="result-liff-error" role="alert">
                   <p className="result-liff-error__text">{liffCompleteError}</p>
-                  <button
-                    type="button"
-                    className="result-liff-error__retry"
-                    onClick={() => void executePendingLiffSave()}
-                    disabled={liffSaveLoading}
-                  >
-                    {liffSaveLoading ? "送信中…" : "再送信"}
-                  </button>
                 </div>
               ) : null}
               {liffSaveLoading && !liffCompleteError ? (
