@@ -14,11 +14,11 @@ const BASE_FULL_URL = process.env.REACT_APP_BASE_FULL_URL || "https://thebase.in
 
 const RESULT_TYPE_KEYS = ["mint", "rose", "lavender", "ivory", "skyblue"];
 const REACT_APP_LIFF_ID = process.env.REACT_APP_LIFF_ID || "";
-/** LIFF ログイン遷移後に save-result を再開するためのフラグ（値は resultKey） */
+/** LIFF ログイン遷移後に push-result を再開するためのフラグ（値は resultKey） */
 const PENDING_LINE_SEND_KEY = "pendingLineSend";
 
 /**
- * Instagram→LINE→LIFF 診断完了時: ログイン確認 → getProfile で userId 取得後のみ save-result。
+ * Instagram→LINE→LIFF 診断完了時: ログイン確認 → getProfile 後、/api/line/push-result で Push（idToken 優先で Messaging API と同一ユーザーを確実に）。
  * @returns {Promise<{ ok: true } | { ok: false, kind: "login_redirect" } | { ok: false, kind: "error", message: string }>}
  */
 async function handleComplete(resultKey) {
@@ -59,15 +59,37 @@ async function handleComplete(resultKey) {
 
   console.log("userId:", userId);
 
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  let pushBody = { resultType: resultKey };
   try {
-    const res = await fetch(`${typeof window !== "undefined" ? window.location.origin : ""}/api/save-result`, {
+    const idToken = typeof liff.getIDToken === "function" ? liff.getIDToken() : "";
+    if (idToken && typeof idToken === "string" && idToken.length > 0) {
+      pushBody = { resultType: resultKey, idToken };
+    } else {
+      pushBody = { resultType: resultKey, lineUserId: userId };
+    }
+  } catch (_) {
+    pushBody = { resultType: resultKey, lineUserId: userId };
+  }
+
+  try {
+    let res = await fetch(`${origin}/api/line/push-result`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId, resultKey })
+      body: JSON.stringify(pushBody)
     });
+    if (!res.ok && pushBody.idToken) {
+      const t = await res.text();
+      console.warn("[handleComplete] push-result (idToken) failed, retry with lineUserId", res.status, t);
+      res = await fetch(`${origin}/api/line/push-result`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resultType: resultKey, lineUserId: userId })
+      });
+    }
     if (!res.ok) {
       const t = await res.text();
-      console.warn("[handleComplete] save-result failed", t);
+      console.warn("[handleComplete] push-result failed", t);
       return { ok: false, kind: "error", message: "結果の送信に失敗しました。もう一度お試しください。" };
     }
   } catch (e) {
@@ -84,8 +106,8 @@ async function handleComplete(resultKey) {
 }
 
 /**
- * 公式LINE（友だち追加）へ。LIFF 内では same-window の遷移や closeWindow 無効で同じ画面に留まる端末があるため、
- * 可能なら openWindow({ external: true })。それ以外は通常の location 遷移。
+ * 公式LINE（友だち追加）へ。LIFF 内は external:false で LINE 内ブラウザを切り替えやすい。
+ * openWindow が無い／失敗時は同一 WebView で location.assign。
  */
 async function openLineOfficialAccountLink() {
   if (typeof window === "undefined") return;
@@ -93,8 +115,13 @@ async function openLineOfficialAccountLink() {
     try {
       const liff = (await import("@line/liff")).default;
       await liff.init({ liffId: REACT_APP_LIFF_ID, withLoginOnExternalBrowser: false });
-      if (typeof liff.isInClient === "function" && liff.isInClient() && typeof liff.openWindow === "function") {
-        liff.openWindow({ url: LINE_OFFICIAL_URL, external: true });
+      const inClient = typeof liff.isInClient === "function" && liff.isInClient();
+      if (inClient && typeof liff.openWindow === "function") {
+        liff.openWindow({ url: LINE_OFFICIAL_URL, external: false });
+        return;
+      }
+      if (inClient) {
+        window.location.assign(LINE_OFFICIAL_URL);
         return;
       }
     } catch (e) {
@@ -1561,7 +1588,7 @@ export default function App() {
 をLINEでお届けします✨`;
 
   /**
-   * 「LINEで続きを受け取る🩷」: 必ず先に handleComplete（/api/save-result）→ 成功後に LINE 公式へ遷移。
+   * 「LINEで続きを受け取る🩷」: 必ず先に handleComplete（/api/line/push-result）→ 成功後に LINE 公式へ遷移。
    * handleComplete はこのハンドラからのみ呼ぶ。結果画面表示だけでは送信しない。
    */
   const handleLineContinueAfterResult = async (e) => {
