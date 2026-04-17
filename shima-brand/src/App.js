@@ -188,6 +188,7 @@ function parseInitialResultRoute() {
 /**
  * LINE リッチメニュー / LIFF からの診断入口（女神画面を出さない）。
  * 例: …/start または /?start=1 または /?entry=diagnosis
+ * このときは LINE誘導画面ではなく「診断開始前」カードへ（7問は別ボタン）。
  * Instagram 等のトップは / のまま（女神＝ゴール、診断へは進めない）
  */
 function shouldSkipWelcomeToDiagnosis() {
@@ -660,7 +661,7 @@ const styles = `
     box-sizing: border-box;
   }
   .floating-note { margin-top: 2px; color: #999; font-size: 12px; }
-  .start-screen .start-quiz-entry {
+  .start-screen .diagnosis-quiz-start {
     width: 100%;
     justify-content: center;
     text-align: center;
@@ -1313,7 +1314,7 @@ export default function App() {
 
   useLayoutEffect(() => {
     if (typeof window !== "undefined" && shouldSkipWelcomeToDiagnosis()) {
-      setScreen("start");
+      setScreen("diagnosisEntry");
       return;
     }
     if (deepLinkConsumedRef.current) return;
@@ -1457,7 +1458,8 @@ export default function App() {
     }, WELCOME_MUTED_END_DELAY_MS);
   };
 
-  const startQuiz = () => {
+  /** LIFF / 専用URL から入った「診断開始前」画面でのみ呼ぶ（LINE誘導画面では呼ばない） */
+  const beginDiagnosisQuiz = () => {
     setLiffCompleteError("");
     setLiffSaveLoading(false);
     liffSaveInFlightRef.current = false;
@@ -1771,10 +1773,23 @@ export default function App() {
                 <span className="orb-heart">💜</span>
               </div>
               <p className="start-text">
+                公式LINEを友だち追加すると、お送りするリンクから推し色診断（全7問）へ進めます。まずはLINEへどうぞ。
+              </p>
+              <a className="start-btn" href={LINE_OFFICIAL_URL}>LINE登録して診断を始める✨</a>
+            </section>
+          )}
+
+          {screen === "diagnosisEntry" && (
+            <section className="card start-screen">
+              <div className="orb">
+                <div className="orb-aurora" />
+                <div className="orb-flow" />
+                <span className="orb-heart">💜</span>
+              </div>
+              <p className="start-text">
                 7つの質問で、あなただけの「推し色」が見つかる。色には感情がある。あなたはどの色に選ばれるのでしょう。
               </p>
-              <a className="start-btn" href={LINE_OFFICIAL_URL} target="_blank" rel="noopener noreferrer">LINE登録して診断を始める✨</a>
-              <button type="button" className="choice-btn start-quiz-entry" onClick={startQuiz}>
+              <button type="button" className="choice-btn diagnosis-quiz-start" onClick={beginDiagnosisQuiz}>
                 <span className="choice-icon" aria-hidden>✨</span>
                 <span>7問の診断を始める</span>
               </button>
