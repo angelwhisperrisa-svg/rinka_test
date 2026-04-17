@@ -93,7 +93,7 @@ async function linkUserRichMenu({ accessToken, lineUserId, resultType }) {
   return { ok: false, reason: "unknown", richMenuId };
 }
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");
   if (req.method === "OPTIONS") {
     res.status(204).end();

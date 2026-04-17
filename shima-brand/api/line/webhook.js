@@ -1,4 +1,4 @@
-import crypto from "crypto";
+const crypto = require("crypto");
 
 const CHANNEL_SECRET = process.env.LINE_CHANNEL_SECRET;
 const CHANNEL_ACCESS_TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN;
@@ -217,7 +217,7 @@ function verifySignature(body, signature) {
   return hash === signature;
 }
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   const signature = req.headers["x-line-signature"];
   const rawBody = JSON.stringify(req.body);
 
