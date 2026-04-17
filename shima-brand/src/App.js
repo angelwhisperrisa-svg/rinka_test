@@ -10,7 +10,6 @@ const BASE_FULL_URL = process.env.REACT_APP_BASE_FULL_URL || "https://thebase.in
 
 const RESULT_TYPE_KEYS = ["mint", "rose", "lavender", "ivory", "skyblue"];
 const REACT_APP_LIFF_ID = process.env.REACT_APP_LIFF_ID || "";
-const LINE_BRAND = "薫凛香房 公式LINE";
 
 /** Instagram→LINE→LIFF 診断完了時: userId 取得後にサーバーへ保存し push させる */
 async function handleComplete(resultKey) {
@@ -88,13 +87,6 @@ function clearStoredOshiType() {
     /* ignore */
   }
 }
-
-function getLineQrSrc() {
-  const custom = process.env.REACT_APP_LINE_QR_IMAGE_URL;
-  if (custom) return custom;
-  return `https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=8&data=${encodeURIComponent(LINE_OFFICIAL_URL)}`;
-}
-
 
 /** 回答スコアのみで判定。同点時は固定の優先順（URLには依存しない） */
 function computeResultFromScores(sc) {
@@ -1164,70 +1156,43 @@ const styles = `
     color: #8b7fa3;
     line-height: 1.55;
   }
-  .line-cta-hero {
+  .result-line-next-wrap {
     margin-top: 28px;
     padding: 22px 16px 26px;
     border-radius: 20px;
-    background: linear-gradient(160deg, rgba(6, 199, 85, 0.12), rgba(124, 58, 237, 0.08));
-    border: 2px solid rgba(6, 199, 85, 0.35);
-    text-align: center;
+    background: linear-gradient(160deg, rgba(6, 199, 85, 0.1), rgba(124, 58, 237, 0.06));
+    border: 2px solid rgba(6, 199, 85, 0.28);
     width: 100%;
   }
-  .line-cta-hero-title {
-    margin: 0 0 6px;
-    font-size: clamp(17px, 4.5vw, 20px);
-    font-weight: 800;
-    color: #1a5c3a;
-    letter-spacing: 0.04em;
+  .result-line-next-copy {
+    margin: 0 0 18px;
+    font-size: clamp(14px, 3.7vw, 16px);
+    line-height: 1.85;
+    color: #5c5470;
+    font-weight: 700;
+    white-space: pre-line;
+    text-align: left;
   }
-  .line-cta-hero-sub {
-    margin: 0 0 16px;
-    font-size: 13px;
-    color: #4a5568;
-    line-height: 1.5;
-  }
-  .line-qr-big {
-    display: block;
-    width: min(280px, 78vw);
-    height: auto;
-    margin: 0 auto 18px;
-    border-radius: 12px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.12);
-    background: #fff;
-    padding: 8px;
-  }
-  .line-result-open-btn {
-    display: inline-flex;
+  .result-line-next-btn {
+    display: flex;
     align-items: center;
     justify-content: center;
-    width: min(92vw, 420px);
-    min-height: 56px;
+    width: 100%;
+    border: none;
     border-radius: 999px;
-    text-decoration: none;
-    margin-top: 14px;
-    padding: 14px 18px;
-    color: #fff;
-    font-size: clamp(14px, 3.9vw, 16px);
+    padding: 18px 20px;
+    font-family: inherit;
+    font-size: clamp(16px, 4.5vw, 18px);
     font-weight: 800;
+    color: #fff;
+    cursor: pointer;
+    background: linear-gradient(135deg, #06C755, #05a84a);
+    box-shadow: 0 12px 32px rgba(6, 199, 85, 0.38);
+    transition: transform 0.18s ease;
     line-height: 1.35;
-    background: linear-gradient(135deg, #4f46e5, #9333ea);
-    box-shadow: 0 10px 30px rgba(79, 70, 229, 0.38);
-    border: 1px solid rgba(255, 255, 255, 0.35);
   }
-  .line-result-open-btn:active {
+  .result-line-next-btn:active {
     transform: scale(0.98);
-  }
-  .line-gate-spinner {
-    width: 40px;
-    height: 40px;
-    border: 3px solid rgba(124, 58, 237, 0.25);
-    border-top-color: #9333ea;
-    border-radius: 50%;
-    animation: gateSpin 0.85s linear infinite;
-    margin: 24px auto;
-  }
-  @keyframes gateSpin {
-    to { transform: rotate(360deg); }
   }
 
   .result-card--reveal {
@@ -1494,21 +1459,41 @@ export default function App() {
     return () => { cancelled = true; };
   }, [screen, resultKey]);
 
-  const lineQrSrc = getLineQrSrc();
-  const renderLineAcquisitionBlock = (typeKey) => {
-   
+  const RESULT_LINE_NEXT_COPY = `この先では、
 
-    return (
-    <div className="line-cta-hero">
-      <p className="line-cta-hero-title">{LINE_BRAND}</p>
-      <p className="line-cta-hero-sub">
-        フル鑑定の続きはLINEで受け取れます。まずはQRコードで公式LINEを登録し、下のボタンでこの推し色結果を開いてください。
-      </p>
-      <img className="line-qr-big" src={lineQrSrc} alt={`${LINE_BRAND}のQRコード`} width={300} height={300} />
-    
-    </div>
-    );
+・なぜこの色になったのか
+・今のあなたの状態
+・現実でどう活かすか
+
+をLINEでお届けします✨`;
+
+  const handleLineContinueAfterResult = async () => {
+    if (typeof window === "undefined") return;
+    if (!REACT_APP_LIFF_ID) {
+      window.location.assign(LINE_OFFICIAL_URL);
+      return;
+    }
+    try {
+      const liff = (await import("@line/liff")).default;
+      await liff.init({ liffId: REACT_APP_LIFF_ID, withLoginOnExternalBrowser: false });
+      if (liff.isInClient() && typeof liff.closeWindow === "function") {
+        liff.closeWindow();
+        return;
+      }
+    } catch (e) {
+      console.warn("[handleLineContinueAfterResult]", e);
+    }
+    window.location.assign(LINE_OFFICIAL_URL);
   };
+
+  const renderLineContinueBlock = () => (
+    <div className="result-line-next-wrap">
+      <p className="result-line-next-copy">{RESULT_LINE_NEXT_COPY}</p>
+      <button type="button" className="result-line-next-btn" onClick={handleLineContinueAfterResult}>
+        LINEで続きを受け取る🩷
+      </button>
+    </div>
+  );
 
   const renderOshiResultCard = (res, isFull, typeKey) => {
     const baseShopUrl = getBaseShopUrlForType(typeKey);
@@ -1577,10 +1562,10 @@ export default function App() {
           </div>
           <div className="lock-overlay">
             <div className="lock-icon" aria-hidden>🔒</div>
-            <div className="lock-title">LINE登録後はリッチメニューから色別の無料鑑定を受け取れます。</div>
+            <div className="lock-title">続きの鑑定はLINEトークでお届けします。</div>
           </div>
         </div>
-        {renderLineAcquisitionBlock(typeKey)}
+        {renderLineContinueBlock()}
         {renderBaseCta()}
         <div className="result-retry-row">
           <button type="button" className="retry-btn" onClick={resetDiagnosis}>
