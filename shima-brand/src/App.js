@@ -1373,16 +1373,20 @@ export default function App() {
 
         const inClient = liff.isInClient();
         const loggedIn = liff.isLoggedIn();
+        console.log("[liff] isInClient immediately after init:", inClient);
         console.log("[liff] isInClient:", inClient, "isLoggedIn:", loggedIn, "resultKey:", resultKey);
 
-        // --- liff.sendMessages: 診断完了直後かつLINEアプリ内のみ ---
+        // --- liff.sendMessages: 診断完了直後に送信を試行 ---
         console.log(
           "[liff.sendMessages] precheck",
           "inClient=", inClient,
           "shouldSend=", shouldSendLinePushRef.current,
           "alreadySent=", liffMsgSentRef.current
         );
-        if (inClient && shouldSendLinePushRef.current && !liffMsgSentRef.current) {
+        if (shouldSendLinePushRef.current && !liffMsgSentRef.current) {
+          if (!inClient) {
+            console.warn("[liff.sendMessages] trying send even though isInClient=false");
+          }
           try {
             await liff.sendMessages([{ type: "text", text: "color=" + resultKey }]);
             console.log("[liff.sendMessages] sent: color=" + resultKey);
