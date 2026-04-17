@@ -59,28 +59,58 @@ function splitLineMessages(text) {
 }
 
 async function verifyIdToken(idToken, channelId) {
-  const body = new URLSearchParams();
-  body.set("id_token", idToken);
-  body.set("client_id", channelId);
-  const r = await fetch("https://api.line.me/oauth2/v2.1/verify", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: body.toString()
+  console.log("[push-result] idToken 検証開始", {
+    channelIdPresent: Boolean(channelId),
+    channelId: channelId || "(none)",
+    idToken: idToken || "(none)"
   });
-  if (!r.ok) return null;
-  const data = await r.json();
-  return data.sub || null;
+  try {
+    const body = new URLSearchParams();
+    body.set("id_token", idToken);
+    body.set("client_id", channelId);
+    const r = await fetch("https://api.line.me/oauth2/v2.1/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: body.toString()
+    });
+    const rawText = await r.text();
+    console.log("[push-result] LINE id_token verify HTTP", r.status, r.statusText, rawText.slice(0, 800));
+    if (!r.ok) {
+      console.log("[push-result] idToken 検証結果: sub は取得できず（HTTP エラー）");
+      return null;
+    }
+    let data;
+    try {
+      data = JSON.parse(rawText);
+    } catch (e) {
+      console.log("[push-result] idToken verify JSON parse error (catch)", String(e));
+      return null;
+    }
+    const sub = data.sub || null;
+    console.log("[push-result] idToken 検証結果: sub", sub || "(null)");
+    return sub;
+  } catch (e) {
+    console.log("[push-result] LINE id_token verify fetch error (catch)", String(e));
+    return null;
+  }
 }
 
 async function getUserIdFromAccessToken(accessToken) {
-  const r = await fetch("https://api.line.me/v2/profile", {
-    headers: {
-      Authorization: `Bearer ${accessToken}`
-    }
-  });
-  if (!r.ok) return null;
-  const data = await r.json();
-  return data.userId || null;
+  try {
+    const r = await fetch("https://api.line.me/v2/profile", {
+      headers: {
+        Authorization: `Bearer ${accessToken}`
+      }
+    });
+    const rawText = await r.text();
+    console.log("[push-result] LINE v2/profile (accessToken)", r.status, r.statusText, rawText.slice(0, 400));
+    if (!r.ok) return null;
+    const data = JSON.parse(rawText);
+    return data.userId || null;
+  } catch (e) {
+    console.log("[push-result] getUserIdFromAccessToken (catch)", String(e));
+    return null;
+  }
 }
 
 async function linkUserRichMenu({ accessToken, lineUserId, resultType }) {
@@ -89,16 +119,24 @@ async function linkUserRichMenu({ accessToken, lineUserId, resultType }) {
 
   const endpoint = `https://api.line.me/v2/bot/user/${encodeURIComponent(lineUserId)}/richmenu/${encodeURIComponent(richMenuId)}`;
   for (let attempt = 1; attempt <= 3; attempt += 1) {
-    const r = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`
+    try {
+      const r = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`
+        }
+      });
+      const detail = await r.text();
+      console.log("[push-result] richmenu link HTTP", attempt, r.status, detail.slice(0, 400));
+      if (r.ok) return { ok: true, attempt, richMenuId };
+      if (attempt === 3) {
+        return { ok: false, status: r.status, detail: detail.slice(0, 500), attempt, richMenuId };
       }
-    });
-    if (r.ok) return { ok: true, attempt, richMenuId };
-    const detail = await r.text();
-    if (attempt === 3) {
-      return { ok: false, status: r.status, detail: detail.slice(0, 500), attempt, richMenuId };
+    } catch (e) {
+      console.log("[push-result] richmenu link fetch (catch)", attempt, String(e));
+      if (attempt === 3) {
+        return { ok: false, reason: "fetch_error", detail: String(e), attempt, richMenuId };
+      }
     }
   }
   return { ok: false, reason: "unknown", richMenuId };
@@ -111,104 +149,169 @@ module.exports = async function handler(req, res) {
     return;
   }
   if (req.method !== "POST") {
-    res.status(405).json({ error: "Method not allowed" });
+    res.status(405).json({ success: false, failure: true, error: "Method not allowed" });
     return;
   }
 
-  const channelAccessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN;
-  const channelId = process.env.LINE_CHANNEL_ID;
-  if (!channelAccessToken) {
-    res.status(500).json({ error: "Server missing LINE_CHANNEL_ACCESS_TOKEN" });
-    return;
-  }
-
-  let payload = req.body;
-  if (typeof payload === "string") {
-    try {
-      payload = JSON.parse(payload || "{}");
-    } catch {
-      res.status(400).json({ error: "Invalid JSON body" });
+  try {
+    const channelAccessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+    const channelId = process.env.LINE_CHANNEL_ID;
+    if (!channelAccessToken) {
+      console.log("[push-result] failure: LINE_CHANNEL_ACCESS_TOKEN 未設定");
+      res.status(500).json({
+        success: false,
+        failure: true,
+        error: "Server missing LINE_CHANNEL_ACCESS_TOKEN"
+      });
       return;
     }
-  }
 
-  const { lineUserId, idToken, accessToken, resultType, diagnosisText } = payload || {};
-  const hasLineUserId = typeof lineUserId === "string" && lineUserId.length > 0;
-  const hasIdToken = typeof idToken === "string" && idToken.length > 0;
-  const hasAccessToken = typeof accessToken === "string" && accessToken.length > 0;
-  if ((!hasLineUserId && !hasIdToken && !hasAccessToken) || !VALID_TYPES.includes(resultType)) {
-    res.status(400).json({ error: "Invalid identity payload or resultType" });
-    return;
-  }
+    let payload = req.body;
+    if (typeof payload === "string") {
+      try {
+        payload = JSON.parse(payload || "{}");
+      } catch (e) {
+        console.log("[push-result] Invalid JSON body (catch)", String(e));
+        res.status(400).json({ success: false, failure: true, error: "Invalid JSON body" });
+        return;
+      }
+    }
 
-  let resolvedLineUserId = hasLineUserId ? lineUserId : null;
-  if (!resolvedLineUserId && hasIdToken && channelId) {
-    resolvedLineUserId = await verifyIdToken(idToken, channelId);
-  }
-  if (!resolvedLineUserId && hasAccessToken) {
-    resolvedLineUserId = await getUserIdFromAccessToken(accessToken);
-  }
-  if (!resolvedLineUserId) {
-    res.status(401).json({ error: "Unable to resolve LINE user id" });
-    return;
-  }
+    const { lineUserId, idToken, accessToken, resultType, diagnosisText } = payload || {};
+    const hasLineUserId = typeof lineUserId === "string" && lineUserId.length > 0;
+    const hasIdToken = typeof idToken === "string" && idToken.length > 0;
+    const hasAccessToken = typeof accessToken === "string" && accessToken.length > 0;
 
-  const siteBase = (process.env.PUBLIC_SITE_URL || "https://shima-brand.vercel.app").replace(/\/$/, "");
-  const fullUrl = `${siteBase}/result?type=${encodeURIComponent(resultType)}&mode=full`;
-  const label = TYPE_LABEL[resultType] || resultType;
-
-  const serverBody = PUSH_BODY[resultType] || "";
-  const clientExtra =
-    typeof diagnosisText === "string" && diagnosisText.trim().length > 0
-      ? `\n\n── 鑑定メモ ──\n${diagnosisText.trim().slice(0, 3500)}`
-      : "";
-
-  const block1 = `【推し色診断・結果】\nあなたの推し色は「${label}」タイプです。\n\n${serverBody}${clientExtra}\n\nこのメッセージで診断は完了です。続きはLINEのリッチメニューからご利用ください。\n\n▼フル鑑定ページ\n${fullUrl}`;
-
-  const messages = splitLineMessages(block1);
-
-  const pushRes = await fetch("https://api.line.me/v2/bot/message/push", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${channelAccessToken}`
-    },
-    body: JSON.stringify({ to: resolvedLineUserId, messages })
-  });
-
-  if (!pushRes.ok) {
-    const detail = await pushRes.text();
-    console.error("LINE push failed", pushRes.status, detail);
-    res.status(502).json({
-      error: "LINE Messaging API push failed",
-      status: pushRes.status,
-      detail: detail.slice(0, 500)
+    console.log("[push-result] リクエスト受信", {
+      idToken: hasIdToken ? idToken : "(none)",
+      lineUserId: hasLineUserId ? lineUserId : "(none)",
+      hasAccessToken,
+      resultType: resultType || "(none)"
     });
-    return;
-  }
 
-  const richMenuLinkResult = await linkUserRichMenu({ accessToken: channelAccessToken, lineUserId: resolvedLineUserId, resultType });
-  console.info("LINE rich menu link trace", {
-    resultType,
-    richMenuId: richMenuLinkResult.richMenuId || "",
-    ok: !!richMenuLinkResult.ok,
-    attempt: richMenuLinkResult.attempt || null,
-    reason: richMenuLinkResult.reason || null
-  });
-  if (!richMenuLinkResult.ok) {
-    console.warn("LINE rich menu link skipped/failed", {
+    if ((!hasLineUserId && !hasIdToken && !hasAccessToken) || !VALID_TYPES.includes(resultType)) {
+      console.log("[push-result] failure: Invalid identity or resultType");
+      res.status(400).json({
+        success: false,
+        failure: true,
+        error: "Invalid identity payload or resultType"
+      });
+      return;
+    }
+
+    let resolvedLineUserId = hasLineUserId ? lineUserId : null;
+    if (!resolvedLineUserId && hasIdToken && channelId) {
+      resolvedLineUserId = await verifyIdToken(idToken, channelId);
+    }
+    if (!resolvedLineUserId && hasAccessToken) {
+      resolvedLineUserId = await getUserIdFromAccessToken(accessToken);
+    }
+
+    console.log("[push-result] 解決後 lineUserId（push の to）", resolvedLineUserId || "(null)");
+
+    if (!resolvedLineUserId) {
+      console.log("[push-result] failure: Unable to resolve LINE user id");
+      res.status(401).json({
+        success: false,
+        failure: true,
+        error: "Unable to resolve LINE user id"
+      });
+      return;
+    }
+
+    const siteBase = (process.env.PUBLIC_SITE_URL || "https://shima-brand.vercel.app").replace(/\/$/, "");
+    const fullUrl = `${siteBase}/result?type=${encodeURIComponent(resultType)}&mode=full`;
+    const label = TYPE_LABEL[resultType] || resultType;
+
+    const serverBody = PUSH_BODY[resultType] || "";
+    const clientExtra =
+      typeof diagnosisText === "string" && diagnosisText.trim().length > 0
+        ? `\n\n── 鑑定メモ ──\n${diagnosisText.trim().slice(0, 3500)}`
+        : "";
+
+    const block1 = `【推し色診断・結果】\nあなたの推し色は「${label}」タイプです。\n\n${serverBody}${clientExtra}\n\nこのメッセージで診断は完了です。続きはLINEのリッチメニューからご利用ください。\n\n▼フル鑑定ページ\n${fullUrl}`;
+
+    const messages = splitLineMessages(block1);
+
+    let pushRes;
+    let pushResponseText;
+    try {
+      pushRes = await fetch("https://api.line.me/v2/bot/message/push", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${channelAccessToken}`
+        },
+        body: JSON.stringify({ to: resolvedLineUserId, messages })
+      });
+      pushResponseText = await pushRes.text();
+    } catch (e) {
+      console.log("[push-result] pushMessage fetch error (catch)", String(e));
+      res.status(502).json({
+        success: false,
+        failure: true,
+        error: "LINE push fetch failed",
+        detail: String(e && e.message ? e.message : e)
+      });
+      return;
+    }
+
+    console.log("[push-result] LINE pushMessage のレスポンス", pushRes.status, pushRes.statusText, pushResponseText.slice(0, 800));
+
+    if (!pushRes.ok) {
+      console.log("[push-result] LINE API エラー（push not ok）", pushResponseText);
+      res.status(502).json({
+        success: false,
+        failure: true,
+        error: "LINE Messaging API push failed",
+        status: pushRes.status,
+        detail: pushResponseText.slice(0, 500)
+      });
+      return;
+    }
+
+    let richMenuLinkResult;
+    try {
+      richMenuLinkResult = await linkUserRichMenu({ accessToken: channelAccessToken, lineUserId: resolvedLineUserId, resultType });
+    } catch (e) {
+      console.log("[push-result] linkUserRichMenu (catch)", String(e));
+      richMenuLinkResult = { ok: false, reason: "exception", detail: String(e && e.message ? e.message : e) };
+    }
+
+    console.log("[push-result] LINE rich menu link trace", {
       resultType,
       richMenuId: richMenuLinkResult.richMenuId || "",
-      status: richMenuLinkResult.status,
-      detail: richMenuLinkResult.detail,
-      reason: richMenuLinkResult.reason
+      ok: !!richMenuLinkResult.ok,
+      attempt: richMenuLinkResult.attempt || null,
+      reason: richMenuLinkResult.reason || null
+    });
+    if (!richMenuLinkResult.ok) {
+      console.log("[push-result] LINE rich menu link skipped/failed", {
+        resultType,
+        richMenuId: richMenuLinkResult.richMenuId || "",
+        status: richMenuLinkResult.status,
+        detail: richMenuLinkResult.detail,
+        reason: richMenuLinkResult.reason
+      });
+    }
+
+    const body = {
+      success: true,
+      failure: false,
+      ok: true,
+      resultType,
+      richMenuId: richMenuLinkResult.richMenuId || "",
+      richMenuLinkResult
+    };
+    console.log("[push-result] success レスポンス", { resultType, richMenuOk: richMenuLinkResult.ok });
+    res.status(200).json(body);
+  } catch (err) {
+    console.log("[push-result] handler 全体 catch", String(err));
+    res.status(500).json({
+      success: false,
+      failure: true,
+      error: "push-result internal error",
+      detail: String(err && err.message ? err.message : err)
     });
   }
-
-  res.status(200).json({
-    ok: true,
-    resultType,
-    richMenuId: richMenuLinkResult.richMenuId || "",
-    richMenuLinkResult
-  });
-}
+};

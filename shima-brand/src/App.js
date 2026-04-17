@@ -72,25 +72,40 @@ async function handleComplete(resultKey) {
     pushBody = { resultType: resultKey, lineUserId: userId };
   }
 
+  const parsePushJson = async (response) => {
+    const raw = await response.text();
+    try {
+      return { raw, data: JSON.parse(raw) };
+    } catch {
+      return { raw, data: {} };
+    }
+  };
+
   try {
     let res = await fetch(`${origin}/api/line/push-result`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(pushBody)
     });
-    if (!res.ok && pushBody.idToken) {
-      const t = await res.text();
-      console.warn("[handleComplete] push-result (idToken) failed, retry with lineUserId", res.status, t);
+    let { data } = await parsePushJson(res);
+    if ((!res.ok || data.failure === true || data.success === false) && pushBody.idToken) {
+      console.warn("[handleComplete] push-result (idToken) failed, retry with lineUserId", res.status, data);
       res = await fetch(`${origin}/api/line/push-result`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ resultType: resultKey, lineUserId: userId })
       });
+      const second = await parsePushJson(res);
+      data = second.data;
     }
-    if (!res.ok) {
-      const t = await res.text();
-      console.warn("[handleComplete] push-result failed", t);
-      return { ok: false, kind: "error", message: "結果の送信に失敗しました。もう一度お試しください。" };
+    if (!res.ok || data.failure === true || data.success === false) {
+      console.warn("[handleComplete] push-result failure", res.status, data);
+      const hint = typeof data.detail === "string" ? data.detail.slice(0, 120) : "";
+      return {
+        ok: false,
+        kind: "error",
+        message: hint ? `結果の送信に失敗しました。（${hint}）` : "結果の送信に失敗しました。もう一度お試しください。"
+      };
     }
   } catch (e) {
     console.warn("[handleComplete] fetch failed", e);
