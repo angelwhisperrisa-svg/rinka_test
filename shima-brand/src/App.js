@@ -1351,12 +1351,13 @@ export default function App() {
       try {
         const liff = (await import("@line/liff")).default;
         console.log("[liff] init start, liffId:", REACT_APP_LIFF_ID);
-        await liff.init({ liffId: REACT_APP_LIFF_ID, withLoginOnExternalBrowser: false });
+        await liff.init({ liffId: REACT_APP_LIFF_ID, withLoginOnExternalBrowser: true });
         if (cancelled) return;
 
         const inClient = liff.isInClient();
+        const loggedIn = liff.isLoggedIn();
         console.log("[liff] isInClient immediately after init:", inClient);
-        console.log("[liff] isInClient:", inClient, "resultKey:", resultKey);
+        console.log("[liff] isInClient:", inClient, "isLoggedIn:", loggedIn, "resultKey:", resultKey);
         alert("liff.isInClient()=" + String(inClient));
 
         // --- liff.sendMessages: 診断完了直後に送信を試行 ---
@@ -1366,11 +1367,30 @@ export default function App() {
           "shouldSend=", shouldSendLinePushRef.current,
           "alreadySent=", liffMsgSentRef.current
         );
-        if (inClient && shouldSendLinePushRef.current && !liffMsgSentRef.current) {
+        if (shouldSendLinePushRef.current && !liffMsgSentRef.current) {
+          if (!loggedIn) {
+            console.warn("[liff.sendMessages] skipped because LIFF user is not logged in");
+            return;
+          }
           try {
             alert("color=" + resultKey);
-            await liff.sendMessages([{ type: "text", text: "color=" + resultKey }]);
-            console.log("[liff.sendMessages] sent: color=" + resultKey);
+            if (inClient) {
+              await liff.sendMessages([{ type: "text", text: "color=" + resultKey }]);
+              console.log("[liff.sendMessages] sent from client: color=" + resultKey);
+            } else {
+              const idToken = liff.getIDToken();
+              if (!idToken) throw new Error("missing idToken for server fallback");
+              const res = await fetch(`${window.location.origin}/api/line/push-color`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ idToken, resultType: resultKey })
+              });
+              if (!res.ok) {
+                const detail = await res.text();
+                throw new Error(`push-color failed: ${res.status} ${detail}`);
+              }
+              console.log("[liff.sendMessages] sent from server fallback: color=" + resultKey);
+            }
             liffMsgSentRef.current = true;
             shouldSendLinePushRef.current = false;
           } catch (e) {
