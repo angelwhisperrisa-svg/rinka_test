@@ -1356,69 +1356,61 @@ export default function App() {
 
   useEffect(() => {
     if (screen !== "result" || !resultKey) return;
-    if (!REACT_APP_LIFF_ID) return;
-    if (linePushSentRef.current) return;
-    if (!shouldSendLinePushRef.current) return;
-    shouldSendLinePushRef.current = false;
+    if (!REACT_APP_LIFF_ID) {
+      console.warn("[liff] REACT_APP_LIFF_ID is not set");
+      return;
+    }
 
     let cancelled = false;
     (async () => {
       try {
         const liff = (await import("@line/liff")).default;
-        // 外部ブラウザで勝手に LINE ログイン画面へ飛ばさない
+        console.log("[liff] init start, liffId:", REACT_APP_LIFF_ID);
         await liff.init({ liffId: REACT_APP_LIFF_ID, withLoginOnExternalBrowser: false });
         if (cancelled) return;
-        const inLineUi = liff.isInClient() || isLikelyLineInAppBrowser();
-        if (!inLineUi || !liff.isLoggedIn()) return;
-        const idToken = liff.getIDToken();
-        if (!idToken) return;
 
-        const resData = results[resultKey];
-        const diagnosisText = resultModeFull
-          ? resData.fullBody
-          : `${resData.teaserFree}\n\n${resData.hookBeforeLock}`;
-
-        const res = await fetch(`${window.location.origin}/api/line/push-result`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ idToken, resultType: resultKey, diagnosisText })
-        });
-        if (res.ok) linePushSentRef.current = true;
-      } catch (e) {
-        if (process.env.NODE_ENV === "development") {
-          console.warn("[line push]", e);
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [screen, resultKey, resultModeFull]);
-
-  useEffect(() => {
-    if (screen !== "result" || !resultKey) return;
-    if (!REACT_APP_LIFF_ID) return;
-    if (liffMsgSentRef.current) return;
-
-    let cancelled = false;
-    (async () => {
-      try {
-        const liff = (await import("@line/liff")).default;
-        await liff.init({ liffId: REACT_APP_LIFF_ID, withLoginOnExternalBrowser: false });
-        if (cancelled) return;
         const inClient = liff.isInClient();
-        console.log("[liff.sendMessages] isInClient:", inClient, "resultKey:", resultKey);
-        if (!inClient) return;
-        await liff.sendMessages([{ type: "text", text: `color=${resultKey}` }]);
-        console.log("[liff.sendMessages] sent:", `color=${resultKey}`);
-        if (!cancelled) liffMsgSentRef.current = true;
+        const loggedIn = liff.isLoggedIn();
+        console.log("[liff] isInClient:", inClient, "isLoggedIn:", loggedIn, "resultKey:", resultKey);
+
+        // --- liff.sendMessages: LINEアプリ内のみ ---
+        if (inClient && !liffMsgSentRef.current) {
+          try {
+            await liff.sendMessages([{ type: "text", text: `color=${resultKey}` }]);
+            console.log("[liff.sendMessages] sent: color=" + resultKey);
+            liffMsgSentRef.current = true;
+          } catch (e) {
+            console.warn("[liff.sendMessages] error:", String(e));
+          }
+        }
+
+        // --- push-result: LINE内 or LINEブラウザ ---
+        if (!linePushSentRef.current && shouldSendLinePushRef.current) {
+          const inLineUi = inClient || isLikelyLineInAppBrowser();
+          if (inLineUi && loggedIn) {
+            shouldSendLinePushRef.current = false;
+            const idToken = liff.getIDToken();
+            if (idToken) {
+              const resData = results[resultKey];
+              const diagnosisText = resultModeFull
+                ? resData.fullBody
+                : `${resData.teaserFree}\n\n${resData.hookBeforeLock}`;
+              const res = await fetch(`${window.location.origin}/api/line/push-result`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ idToken, resultType: resultKey, diagnosisText })
+              });
+              if (res.ok) linePushSentRef.current = true;
+            }
+          }
+        }
       } catch (e) {
-        console.warn("[liff.sendMessages] error:", String(e));
+        console.warn("[liff] error:", String(e));
       }
     })();
+
     return () => { cancelled = true; };
-  }, [screen, resultKey]);
+  }, [screen, resultKey, resultModeFull]);
 
   const lineQrSrc = getLineQrSrc();
   const renderLineAcquisitionBlock = (typeKey) => {
