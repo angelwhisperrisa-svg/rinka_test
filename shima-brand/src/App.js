@@ -1379,23 +1379,35 @@ export default function App() {
         );
         if (shouldSendLinePushRef.current && !liffMsgSentRef.current) {
           try {
+            const idToken = liff.getIDToken();
+            const accessToken = liff.getAccessToken();
+            console.log("[LIFF DEBUG]", {
+              inClient: liff.isInClient(),
+              isLoggedIn: liff.isLoggedIn(),
+              hasIdToken: !!idToken,
+              hasAccessToken: !!accessToken,
+              resultKey: confirmedResultKey
+            });
+
             let delivered = false;
+            let deliveryRoute = "none";
+
             if (inClient) {
               try {
                 await liff.sendMessages([{ type: "text", text: "color=" + confirmedResultKey }]);
-                console.log("[liff.sendMessages] sent from client: color=" + confirmedResultKey);
+                console.log("[liff.sendMessages] sent from client");
                 delivered = true;
-              } catch (sendErr) {
-                console.warn("[liff.sendMessages] client send failed:", String(sendErr));
+                deliveryRoute = "client";
+              } catch (e) {
+                console.log("[liff.sendMessages] client send failed", e);
               }
             } else {
               console.warn("[liff.sendMessages] skipped: not in LIFF client");
             }
 
             if (!delivered) {
-              const idToken = liff.getIDToken();
-              const accessToken = liff.getAccessToken();
               if (idToken || accessToken) {
+                console.log("[liff.pushResult] using server fallback");
                 const res = await fetch(`${window.location.origin}/api/line/push-result`, {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
@@ -1407,12 +1419,14 @@ export default function App() {
                 }
                 console.log("[liff.pushResult] sent from server fallback:", confirmedResultKey);
                 delivered = true;
+                deliveryRoute = "server_fallback";
               } else {
                 console.warn("[liff.pushResult] skipped: missing idToken and accessToken");
               }
             }
 
             if (delivered) {
+              console.log("[LIFF DEBUG] delivery route:", deliveryRoute);
               liffMsgSentRef.current = true;
               shouldSendLinePushRef.current = false;
             }
