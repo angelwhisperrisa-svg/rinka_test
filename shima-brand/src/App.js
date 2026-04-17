@@ -1357,6 +1357,7 @@ export default function App() {
         const inClient = liff.isInClient();
         console.log("[liff] isInClient immediately after init:", inClient);
         console.log("[liff] isInClient:", inClient, "resultKey:", resultKey);
+        alert("liff.isInClient()=" + String(inClient));
 
         // --- liff.sendMessages: 診断完了直後に送信を試行 ---
         console.log(
@@ -1367,6 +1368,7 @@ export default function App() {
         );
         if (inClient && shouldSendLinePushRef.current && !liffMsgSentRef.current) {
           try {
+            alert("color=" + resultKey);
             await liff.sendMessages([{ type: "text", text: "color=" + resultKey }]);
             console.log("[liff.sendMessages] sent: color=" + resultKey);
             liffMsgSentRef.current = true;
