@@ -1162,6 +1162,7 @@ export default function App() {
   const [currentQ, setCurrentQ] = useState(0);
   const [scores, setScores] = useState(initialScores);
   const [resultKey, setResultKey] = useState("");
+  const resultKeyRef = useRef("");
   const [resultModeFull, setResultModeFull] = useState(false);
   const welcomeVideoRef = useRef(null);
   const finalVideoRef = useRef(null);
@@ -1188,6 +1189,7 @@ export default function App() {
     if (p.showResult && p.resultType) {
       deepLinkConsumedRef.current = true;
       shouldSendLinePushRef.current = false;
+      resultKeyRef.current = p.resultType;
       setResultKey(p.resultType);
       setResultModeFull(Boolean(p.modeFull));
       setScreen("result");
@@ -1213,6 +1215,7 @@ export default function App() {
   }, [screen, resultKey]);
 
   useEffect(() => {
+    resultKeyRef.current = resultKey || "";
     if (resultKey) writeStoredOshiType(resultKey);
   }, [resultKey]);
 
@@ -1295,6 +1298,7 @@ export default function App() {
   const startQuiz = () => {
     shouldSendLinePushRef.current = false;
     liffMsgSentRef.current = false;
+    resultKeyRef.current = "";
     setScreen("quiz");
     setCurrentQ(0);
     setScores(initialScores);
@@ -1311,6 +1315,7 @@ export default function App() {
       return;
     }
     const topResultKey = computeResultFromScores(nextScores);
+    resultKeyRef.current = topResultKey;
     setResultKey(topResultKey);
     setResultModeFull(false);
     shouldSendLinePushRef.current = true;
@@ -1335,12 +1340,18 @@ export default function App() {
     setWelcomeExiting(false);
     setCurrentQ(0);
     setScores(initialScores);
+    resultKeyRef.current = "";
     setResultKey("");
     setResultModeFull(false);
   };
 
   useEffect(() => {
-    if (screen !== "result" || !resultKey) return;
+    if (screen !== "result") return;
+    const confirmedResultKey = resultKeyRef.current || resultKey;
+    if (!confirmedResultKey) {
+      console.warn("[liff] skip send: resultKey is not confirmed yet");
+      return;
+    }
     if (!REACT_APP_LIFF_ID) {
       console.warn("[liff] REACT_APP_LIFF_ID is not set");
       return;
@@ -1357,7 +1368,7 @@ export default function App() {
         const inClient = liff.isInClient();
         const loggedIn = liff.isLoggedIn();
         console.log("[liff] isInClient immediately after init:", inClient);
-        console.log("[liff] isInClient:", inClient, "isLoggedIn:", loggedIn, "resultKey:", resultKey);
+        console.log("[liff] isInClient:", inClient, "isLoggedIn:", loggedIn, "resultKey:", confirmedResultKey);
 
         // --- liff.sendMessages: 診断完了直後に送信を試行 ---
         console.log(
@@ -1371,8 +1382,8 @@ export default function App() {
             let delivered = false;
             if (inClient) {
               try {
-                await liff.sendMessages([{ type: "text", text: "color=" + resultKey }]);
-                console.log("[liff.sendMessages] sent from client: color=" + resultKey);
+                await liff.sendMessages([{ type: "text", text: "color=" + confirmedResultKey }]);
+                console.log("[liff.sendMessages] sent from client: color=" + confirmedResultKey);
                 delivered = true;
               } catch (sendErr) {
                 console.warn("[liff.sendMessages] client send failed:", String(sendErr));
@@ -1387,13 +1398,13 @@ export default function App() {
                 const res = await fetch(`${window.location.origin}/api/line/push-result`, {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ idToken, resultType: resultKey })
+                  body: JSON.stringify({ idToken, resultType: confirmedResultKey })
                 });
                 if (!res.ok) {
                   const detail = await res.text();
                   throw new Error(`push-result failed: ${res.status} ${detail}`);
                 }
-                console.log("[liff.pushResult] sent from server fallback:", resultKey);
+                console.log("[liff.pushResult] sent from server fallback:", confirmedResultKey);
                 delivered = true;
               } else {
                 console.warn("[liff.pushResult] skipped: missing idToken");
