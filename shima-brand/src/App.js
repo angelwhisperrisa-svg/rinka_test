@@ -1184,6 +1184,7 @@ export default function App() {
   const welcomeSilentSkipTimerRef = useRef(null);
   const welcomeEngagedRef = useRef(false);
   const linePushSentRef = useRef(false);
+  const liffMsgSentRef = useRef(false);
 
   const progress = Math.round((currentQ / questions.length) * 100);
   const currentQuestion = questions[currentQ];
@@ -1394,6 +1395,30 @@ export default function App() {
       cancelled = true;
     };
   }, [screen, resultKey, resultModeFull]);
+
+  useEffect(() => {
+    if (screen !== "result" || !resultKey) return;
+    if (!REACT_APP_LIFF_ID) return;
+    if (liffMsgSentRef.current) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const liff = (await import("@line/liff")).default;
+        await liff.init({ liffId: REACT_APP_LIFF_ID, withLoginOnExternalBrowser: false });
+        if (cancelled) return;
+        const inClient = liff.isInClient();
+        console.log("[liff.sendMessages] isInClient:", inClient, "resultKey:", resultKey);
+        if (!inClient) return;
+        await liff.sendMessages([{ type: "text", text: `color=${resultKey}` }]);
+        console.log("[liff.sendMessages] sent:", `color=${resultKey}`);
+        if (!cancelled) liffMsgSentRef.current = true;
+      } catch (e) {
+        console.warn("[liff.sendMessages] error:", String(e));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [screen, resultKey]);
 
   const lineQrSrc = getLineQrSrc();
   const renderLineAcquisitionBlock = (typeKey) => {
