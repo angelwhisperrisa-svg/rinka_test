@@ -83,6 +83,27 @@ async function handleComplete(resultKey) {
   return { ok: true };
 }
 
+/**
+ * 公式LINE（友だち追加）へ。LIFF 内では same-window の遷移や closeWindow 無効で同じ画面に留まる端末があるため、
+ * 可能なら openWindow({ external: true })。それ以外は通常の location 遷移。
+ */
+async function openLineOfficialAccountLink() {
+  if (typeof window === "undefined") return;
+  if (REACT_APP_LIFF_ID) {
+    try {
+      const liff = (await import("@line/liff")).default;
+      await liff.init({ liffId: REACT_APP_LIFF_ID, withLoginOnExternalBrowser: false });
+      if (typeof liff.isInClient === "function" && liff.isInClient() && typeof liff.openWindow === "function") {
+        liff.openWindow({ url: LINE_OFFICIAL_URL, external: true });
+        return;
+      }
+    } catch (e) {
+      console.warn("[openLineOfficialAccountLink]", e);
+    }
+  }
+  window.location.assign(LINE_OFFICIAL_URL);
+}
+
 /** 診断タイプ保持（リッチメニュー等の /result?auto=true から分岐するため） */
 const OSHI_RESULT_STORAGE_KEY = "shima_oshi_result_v1";
 
@@ -1552,7 +1573,7 @@ export default function App() {
     if (liffSaveLoading || liffSaveInFlightRef.current) return;
 
     if (liffMsgSentRef.current) {
-      window.location.assign(LINE_OFFICIAL_URL);
+      await openLineOfficialAccountLink();
       return;
     }
 
@@ -1581,19 +1602,7 @@ export default function App() {
 
     if (!sent) return;
 
-    if (REACT_APP_LIFF_ID) {
-      try {
-        const liff = (await import("@line/liff")).default;
-        await liff.init({ liffId: REACT_APP_LIFF_ID, withLoginOnExternalBrowser: false });
-        if (liff.isInClient() && typeof liff.closeWindow === "function") {
-          liff.closeWindow();
-          return;
-        }
-      } catch (err) {
-        console.warn("[handleLineContinueAfterResult]", err);
-      }
-    }
-    window.location.assign(LINE_OFFICIAL_URL);
+    await openLineOfficialAccountLink();
   };
 
   const renderLineContinueBlock = () => (
@@ -1604,7 +1613,10 @@ export default function App() {
         role="button"
         className="result-line-next-btn"
         aria-disabled={liffSaveLoading}
-        onClick={(ev) => { void handleLineContinueAfterResult(ev); }}
+        onClick={(ev) => {
+          ev.preventDefault();
+          void handleLineContinueAfterResult(ev);
+        }}
       >
         LINEで続きを受け取る🩷
       </a>
