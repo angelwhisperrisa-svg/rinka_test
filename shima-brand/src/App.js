@@ -37,7 +37,10 @@ async function handleComplete(resultKey) {
   try {
     liff = (await import("@line/liff")).default;
     console.log("liff.init start");
-    await liff.init({ liffId: REACT_APP_LIFF_ID });
+    await liff.init({
+      liffId: REACT_APP_LIFF_ID,
+      withLoginOnExternalBrowser: true,
+    });
     console.log("liff.isLoggedIn:", liff.isLoggedIn());
     console.log("liff.isInClient:", liff.isInClient());
   } catch (e) {
