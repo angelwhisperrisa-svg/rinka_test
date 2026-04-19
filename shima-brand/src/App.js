@@ -24,8 +24,8 @@ const PENDING_LINE_SEND_KEY = "pendingLineSend";
 const LIFF_LOGIN_STARTED_KEY = "liff_login_started";
 
 /**
- * liff.login は呼ばない（withLoginOnExternalBrowser との二重遷移を避ける）。
- * getProfile → 失敗時は idToken / accessToken で /api/line/push-result に委譲。
+ * liff.login は呼ばない。isLoggedIn が false のときは getProfile をせず
+ * idToken / accessToken のみで /api/line/push-result を呼ぶ。true のときは getProfile を優先し、失敗時のみトークンを試す。
  * @returns {Promise<{ ok: true } | { ok: false, kind: "error", message: string }>}
  */
 async function handleComplete(resultKey) {
@@ -57,18 +57,33 @@ async function handleComplete(resultKey) {
 
   alert("liff.isLoggedIn(): " + String(liff.isLoggedIn()));
 
+  const loggedIn = typeof liff.isLoggedIn === "function" && liff.isLoggedIn();
   let lineUserId = null;
-  try {
-    const profile = await liff.getProfile();
-    lineUserId = profile?.userId || null;
-    console.log("after getProfile", profile);
-  } catch (e) {
-    console.warn("[handleComplete] getProfile failed (continue with token if any)", e);
-  }
-
   let idToken = null;
   let accessToken = null;
-  if (!lineUserId) {
+
+  if (loggedIn) {
+    try {
+      const profile = await liff.getProfile();
+      lineUserId = profile?.userId || null;
+      console.log("after getProfile", profile);
+    } catch (e) {
+      console.warn("[handleComplete] getProfile failed (continue with token if any)", e);
+    }
+    if (!lineUserId) {
+      try {
+        if (typeof liff.getIDToken === "function") idToken = liff.getIDToken();
+      } catch (e) {
+        console.warn("[handleComplete] getIDToken failed", e);
+      }
+      try {
+        if (typeof liff.getAccessToken === "function") accessToken = liff.getAccessToken();
+      } catch (e) {
+        console.warn("[handleComplete] getAccessToken failed", e);
+      }
+    }
+  } else {
+    console.log("[handleComplete] isLoggedIn false: skip getProfile and liff.login, tokens only → push-result");
     try {
       if (typeof liff.getIDToken === "function") idToken = liff.getIDToken();
     } catch (e) {
