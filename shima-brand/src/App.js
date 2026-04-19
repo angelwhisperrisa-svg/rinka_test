@@ -1824,6 +1824,7 @@ export default function App() {
         disabled={liffSaveLoading}
         onClick={async (ev) => {
           ev.preventDefault();
+          alert("LINEボタン: onClick");
           console.log("CLICK FIRED");
           const res = await handleComplete(resultKey);
           console.log("handleComplete result:", res);
