@@ -20,8 +20,9 @@ const PENDING_LINE_SEND_KEY = "pendingLineSend";
 const LIFF_LOGIN_STARTED_KEY = "liff_login_started";
 
 /**
- * 未ログイン時は liff.login({ redirectUri }) のみ（現在の URL＝/result?type=… を維持）。ログイン後に getProfile → /api/line/push-result。
- * @returns {Promise<{ ok: true } | { ok: false, kind: "login_redirect" } | { ok: false, kind: "error", message: string }>}
+ * liff.login は呼ばない（withLoginOnExternalBrowser との二重遷移を避ける）。
+ * getProfile → 失敗時は idToken / accessToken で /api/line/push-result に委譲。
+ * @returns {Promise<{ ok: true } | { ok: false, kind: "error", message: string }>}
  */
 async function handleComplete(resultKey) {
   console.log('handleComplete start');
@@ -51,67 +52,46 @@ async function handleComplete(resultKey) {
 
   alert("liff.isLoggedIn(): " + String(liff.isLoggedIn()));
 
-  if (!liff.isLoggedIn()) {
-    try {
-      if (typeof window !== "undefined") window.sessionStorage.setItem(PENDING_LINE_SEND_KEY, resultKey);
-    } catch (_) {
-      /* ignore */
-    }
-    try {
-      const readBack = typeof window !== "undefined" ? window.sessionStorage.getItem(PENDING_LINE_SEND_KEY) : "";
-      console.log("[handleComplete] PENDING_LINE_SEND_KEY write/read", { wrote: resultKey, readBack });
-    } catch (e) {
-      console.log("[handleComplete] PENDING_LINE_SEND_KEY readBack error", e);
-    }
-    let loginAlreadyStarted = false;
-    try {
-      loginAlreadyStarted =
-        typeof window !== "undefined" && Boolean(window.sessionStorage.getItem(LIFF_LOGIN_STARTED_KEY));
-    } catch (_) {
-      /* ignore */
-    }
-    if (loginAlreadyStarted) {
-      console.log("[handleComplete] skip liff.login: liff_login_started already set");
-      return {
-        ok: false,
-        kind: "error",
-        message: "ログイン処理が既に開始されています。LINEアプリで開き直すか、しばらく待ってから再度お試しください。"
-      };
-    }
-    try {
-      if (typeof window !== "undefined") window.sessionStorage.setItem(LIFF_LOGIN_STARTED_KEY, "1");
-    } catch (_) {
-      /* ignore */
-    }
-    const redirectUri = typeof window !== "undefined" ? window.location.href : "";
-    console.log("[handleComplete] liff.login redirectUri:", redirectUri);
-    console.log("before liff.login");
-    liff.login({ redirectUri });
-    console.log("[handleComplete] return: login_redirect (liff.login with redirectUri)");
-    return { ok: false, kind: "login_redirect" };
-  }
-
-  let profile;
+  let lineUserId = null;
   try {
-    profile = await liff.getProfile();
+    const profile = await liff.getProfile();
+    lineUserId = profile?.userId || null;
     console.log("after getProfile", profile);
   } catch (e) {
-    console.warn("[handleComplete] getProfile failed", e);
-    console.log("[handleComplete] return: getProfile failed");
-    return { ok: false, kind: "error", message: "LINEのユーザー情報を取得できませんでした。LINEアプリから開き直してお試しください。" };
+    console.warn("[handleComplete] getProfile failed (continue with token if any)", e);
   }
-  console.log("profile result:", profile);
 
-  const lineUserId = profile?.userId || null;
+  let idToken = null;
+  let accessToken = null;
   if (!lineUserId) {
-    console.log("[handleComplete] return: empty profile.userId");
-    return { ok: false, kind: "error", message: "ユーザーIDを取得できませんでした。LINEアプリから開き直してお試しください。" };
+    try {
+      if (typeof liff.getIDToken === "function") idToken = liff.getIDToken();
+    } catch (e) {
+      console.warn("[handleComplete] getIDToken failed", e);
+    }
+    try {
+      if (typeof liff.getAccessToken === "function") accessToken = liff.getAccessToken();
+    } catch (e) {
+      console.warn("[handleComplete] getAccessToken failed", e);
+    }
   }
 
-  console.log("sending result:", resultKey);
+  if (!lineUserId && !idToken && !accessToken) {
+    console.log("[handleComplete] return: no identity (profile / idToken / accessToken)");
+    return {
+      ok: false,
+      kind: "error",
+      message: "LINEのユーザー情報を取得できませんでした。LINEアプリから開き直してお試しください。"
+    };
+  }
+
+  console.log("sending result:", resultKey, { hasLineUserId: Boolean(lineUserId), hasIdToken: Boolean(idToken), hasAccessToken: Boolean(accessToken) });
 
   const origin = typeof window !== "undefined" ? window.location.origin : "";
-  const pushBody = { lineUserId, resultType: resultKey };
+  const pushBody = { resultType: resultKey };
+  if (lineUserId) pushBody.lineUserId = lineUserId;
+  if (idToken) pushBody.idToken = idToken;
+  if (accessToken) pushBody.accessToken = accessToken;
 
   const parsePushJson = async (response) => {
     const raw = await response.text();
@@ -1830,6 +1810,8 @@ export default function App() {
         onClick={async (ev) => {
           ev.preventDefault();
           alert("LINEボタン: onClick");
+          console.log("[LINEボタン] alert直後・handleComplete呼ぶ前", { resultKey });
+          alert("handleComplete呼ぶ前");
           console.log("CLICK FIRED");
           const res = await handleComplete(resultKey);
           console.log("handleComplete result:", res);
