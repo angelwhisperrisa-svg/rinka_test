@@ -24,8 +24,9 @@ const PENDING_LINE_SEND_KEY = "pendingLineSend";
 const LIFF_LOGIN_STARTED_KEY = "liff_login_started";
 
 /**
- * liff.login は呼ばない。isLoggedIn が false のときは getProfile をせず
- * idToken / accessToken のみで /api/line/push-result を呼ぶ。true のときは getProfile を優先し、失敗時のみトークンを試す。
+ * LINE アプリ内: init は withLoginOnExternalBrowser を付けない（UA で判定）。
+ * liff.login は呼ばない。init 後 isLoggedIn が false なら getAccessToken() のみ試し、トークンがあれば push-result へ。
+ * true のときは getProfile を優先し、失敗時のみ idToken / accessToken を試す。
  * @returns {Promise<{ ok: true } | { ok: false, kind: "error", message: string }>}
  */
 async function handleComplete(resultKey) {
@@ -42,11 +43,12 @@ async function handleComplete(resultKey) {
   let liff;
   try {
     liff = (await import("@line/liff")).default;
-    console.log("liff.init start");
-    await liff.init({
-      liffId: REACT_APP_LIFF_ID,
-      withLoginOnExternalBrowser: true,
-    });
+    const ua = typeof navigator !== "undefined" ? navigator.userAgent || "" : "";
+    const likelyLineInApp = /Line\//i.test(ua);
+    const initOpts = { liffId: REACT_APP_LIFF_ID };
+    if (!likelyLineInApp) initOpts.withLoginOnExternalBrowser = true;
+    console.log("liff.init start", { likelyLineInApp, initOptsKeys: Object.keys(initOpts) });
+    await liff.init(initOpts);
     console.log("liff.isLoggedIn:", liff.isLoggedIn());
     console.log("liff.isInClient:", liff.isInClient());
   } catch (e) {
@@ -83,12 +85,7 @@ async function handleComplete(resultKey) {
       }
     }
   } else {
-    console.log("[handleComplete] isLoggedIn false: skip getProfile and liff.login, tokens only → push-result");
-    try {
-      if (typeof liff.getIDToken === "function") idToken = liff.getIDToken();
-    } catch (e) {
-      console.warn("[handleComplete] getIDToken failed", e);
-    }
+    console.log("[handleComplete] isLoggedIn false: skip liff.login, getAccessToken() only → push-result if present");
     try {
       if (typeof liff.getAccessToken === "function") accessToken = liff.getAccessToken();
     } catch (e) {
