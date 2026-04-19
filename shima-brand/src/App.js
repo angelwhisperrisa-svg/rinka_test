@@ -11,6 +11,10 @@ const INTRO_DIAGNOSIS_MS = 15000;
 const WELCOME_MUTED_END_DELAY_MS = 7000;
 const LINE_OFFICIAL_URL = "https://line.me/R/ti/p/@877xrsvw";
 const BASE_FULL_URL = process.env.REACT_APP_BASE_FULL_URL || "https://thebase.in/";
+/** /api 呼び出し先（別 Vercel ドメインで開いても shima-brand 側の Functions を叩く） */
+const PUBLIC_APP_ORIGIN = (
+  process.env.REACT_APP_PUBLIC_APP_ORIGIN || "https://shima-brand.vercel.app"
+).replace(/\/$/, "");
 
 const RESULT_TYPE_KEYS = ["mint", "rose", "lavender", "ivory", "skyblue"];
 const REACT_APP_LIFF_ID = process.env.REACT_APP_LIFF_ID || "";
@@ -87,7 +91,7 @@ async function handleComplete(resultKey) {
 
   console.log("sending result:", resultKey, { hasLineUserId: Boolean(lineUserId), hasIdToken: Boolean(idToken), hasAccessToken: Boolean(accessToken) });
 
-  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const origin = PUBLIC_APP_ORIGIN;
   const pushBody = { resultType: resultKey };
   if (lineUserId) pushBody.lineUserId = lineUserId;
   if (idToken) pushBody.idToken = idToken;

@@ -2,6 +2,7 @@
   "name": "shima-brand",
   "version": "0.1.0",
   "private": true,
+  "homepage": "https://shima-brand.vercel.app",
   "dependencies": {
     "@line/liff": "^2.24.0",
     "@testing-library/dom": "^10.4.1",
